@@ -1,0 +1,12 @@
+data/*
+!data/.gitkeep
+coverage/
+node_modules/
+playwright-report/
+test-results/
+.env
+compose.override.yaml
+config/snmp-targets.json
+config/kubeconfig
+*.log
+.DS_Store

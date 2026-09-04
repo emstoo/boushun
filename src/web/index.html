@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#07110f">
+    <title>Boushun · Network Map</title>
+    <link rel="stylesheet" href="/styles.css?v=0.1.0-ui1">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="/" aria-label="Boushun home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" role="img">
+              <path d="M11 4h10M13 4l-2 7v11l5 5 5-5V11l-2-7M11 12h10M11 21h10"/>
+              <circle cx="16" cy="16.5" r="2.8"/>
+            </svg>
+          </span>
+          <span><strong>Boushun</strong><small>Network atlas</small></span>
+        </a>
+
+        <nav class="side-nav" aria-label="Main navigation">
+          <button class="nav-item active" data-section="map">
+            <span class="nav-icon">⌘</span><span>Topology</span>
+          </button>
+          <button class="nav-item" data-section="ports">
+            <span class="nav-icon">⇄</span><span>Open ports</span>
+          </button>
+          <button class="nav-item" data-section="inventory">
+            <span class="nav-icon">≡</span><span>Inventory</span>
+          </button>
+          <button class="nav-item" data-section="evidence">
+            <span class="nav-icon">◎</span><span>Evidence</span>
+          </button>
+          <button class="nav-item" data-section="sources">
+            <span class="nav-icon">◉</span><span>Sources</span>
+          </button>
+          <button class="nav-item" data-section="history">
+            <span class="nav-icon">◷</span><span>History</span>
+          </button>
+          <button class="nav-item" data-section="automation">
+            <span class="nav-icon">⏱</span><span>Automation</span><span class="nav-badge hidden" id="automation-nav-badge">0</span>
+          </button>
+          <button class="nav-item" data-section="database">
+            <span class="nav-icon">▣</span><span>Database</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-spacer"></div>
+        <section class="probe-card">
+          <div class="probe-heading">
+            <span class="pulse-dot"></span>
+            <span>Local probe</span>
+          </div>
+          <dl>
+            <div><dt>Host</dt><dd id="probe-host">—</dd></div>
+            <div><dt>Mode</dt><dd id="probe-mode">Passive</dd></div>
+          </dl>
+          <button class="button secondary full" id="passive-scan">Refresh facts</button>
+        </section>
+        <p class="privacy-note">All observations stay on this machine.</p>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Local network / live atlas</p>
+            <h1>Your network, with receipts.</h1>
+            <p class="last-seen" id="last-seen">Loading the latest observation…</p>
+          </div>
+          <div class="top-actions">
+            <button class="button tertiary" id="export-json">Export JSON</button>
+            <button class="button tertiary" id="export-svg">Export SVG</button>
+            <button class="button secondary" id="open-service-dialog">Scan TCP</button>
+            <button class="button secondary" id="open-udp-dialog">Scan UDP</button>
+            <button class="button primary" id="open-scan-dialog">
+              <span aria-hidden="true">↻</span> Scan network
+            </button>
+          </div>
+        </header>
+
+        <div class="demo-banner hidden" id="demo-banner">
+          <strong>Demo mode</strong>
+          <span>This is synthetic data. Start without <code>BOUSHUN_DEMO=1</code> to inspect the local host.</span>
+        </div>
+
+        <div class="warning-banner hidden" id="warning-banner" role="status"></div>
+
+        <section class="scan-status hidden" id="scan-status" aria-label="Active scan status">
+          <span class="scan-status-pulse" aria-hidden="true"></span>
+          <div class="scan-status-content">
+            <div class="scan-status-heading">
+              <strong id="scan-status-title">Preparing scan</strong>
+              <span id="scan-status-percent">0%</span>
+            </div>
+            <p id="scan-status-message">Waiting for the scan job to start.</p>
+            <progress id="global-scan-progress" max="100" value="0" aria-label="Scan progress"></progress>
+            <dl class="scan-status-facts">
+              <div><dt>Target</dt><dd id="scan-status-target">—</dd></div>
+              <div><dt>Progress</dt><dd id="scan-status-count">0 / 0</dd></div>
+              <div><dt>Results</dt><dd id="scan-status-results">—</dd></div>
+              <div><dt>Elapsed</dt><dd id="scan-status-elapsed">0s</dd></div>
+            </dl>
+          </div>
+          <button class="button secondary" id="global-cancel-scan" type="button">Cancel scan</button>
+        </section>
+
+        <section class="scan-status database-empty-status hidden" id="database-empty-status" aria-label="Database recovery">
+          <span class="database-empty-status-icon" aria-hidden="true">!</span>
+          <div class="scan-status-content">
+            <div class="scan-status-heading">
+              <strong>The database is empty</strong>
+            </div>
+            <p>Collect local interface facts to restore eligible scan ranges.</p>
+          </div>
+          <button class="button primary" id="database-collect-facts" type="button">Collect local facts</button>
+        </section>
+
+        <section class="stats-grid" aria-label="Network summary">
+          <article class="stat-card accent-a">
+            <span class="stat-label">Observed devices</span>
+            <strong id="stat-devices">—</strong>
+            <small id="stat-device-diff">Waiting for data</small>
+          </article>
+          <article class="stat-card accent-b">
+            <span class="stat-label">Network segments</span>
+            <strong id="stat-networks">—</strong>
+            <small>Private IPv4 scopes</small>
+          </article>
+          <article class="stat-card accent-c">
+            <span class="stat-label">Backed links</span>
+            <strong id="stat-links">—</strong>
+            <small>Verified, strong or inferred</small>
+          </article>
+          <article class="stat-card accent-d">
+            <span class="stat-label">Uncertain links</span>
+            <strong id="stat-weak">—</strong>
+            <small>Shown as dotted evidence</small>
+          </article>
+        </section>
+
+        <section class="panel map-panel" id="map-section">
+          <div class="panel-header">
+            <div>
+              <p class="section-kicker">Evidence-backed topology</p>
+              <h2>Network map</h2>
+            </div>
+            <div class="map-tools">
+              <label class="search-field">
+                <span aria-hidden="true">⌕</span>
+                <input id="graph-search" type="search" placeholder="Search device, IP or MAC" autocomplete="off">
+              </label>
+              <label class="select-field">
+                <span>View</span>
+                <select id="map-view">
+                  <option value="logical">Logical</option>
+                  <option value="physical">Physical</option>
+                  <option value="services">Services</option>
+                </select>
+              </label>
+              <label class="select-field">
+                <span>Layer</span>
+                <select id="layer-filter">
+                  <option value="all">All</option>
+                  <option value="l2">Layer 2</option>
+                  <option value="l3">Layer 3</option>
+                </select>
+              </label>
+              <label class="select-field">
+                <span>Confidence</span>
+                <select id="confidence-filter">
+                  <option value="all">All</option>
+                  <option value="backed">Hide weak</option>
+                  <option value="strong">Strong + verified</option>
+                  <option value="verified">Verified only</option>
+                </select>
+              </label>
+              <button class="icon-button" id="reset-layout" title="Reset layout" aria-label="Reset layout">⌗</button>
+            </div>
+          </div>
+
+          <div class="map-legend" id="map-legend"></div>
+          <div class="graph-stage" id="graph-stage">
+            <svg id="network-graph" role="img" aria-label="Network topology"></svg>
+            <aside class="node-status-legend" aria-label="Node status legend">
+              <strong>Node status</strong>
+              <div class="node-status-legend-items">
+                <span><i class="status-legend-dot online" aria-hidden="true"></i>Online</span>
+                <span><i class="status-legend-dot recent" aria-hidden="true"></i>Recent</span>
+                <span><i class="status-legend-dot offline" aria-hidden="true"></i>Offline</span>
+                <span><i class="status-legend-dot unknown" aria-hidden="true"></i>Unknown</span>
+              </div>
+            </aside>
+            <div class="viewport-controls" aria-label="Map zoom controls">
+              <button class="viewport-button" id="zoom-in" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+              <span class="zoom-readout" id="zoom-level" aria-live="polite">100%</span>
+              <button class="viewport-button" id="zoom-out" type="button" title="Zoom out" aria-label="Zoom out">−</button>
+              <button class="viewport-button reset" id="reset-viewport" type="button" title="Reset zoom and position" aria-label="Reset zoom and map position">↺</button>
+            </div>
+            <div class="empty-state hidden" id="graph-empty">
+              <span class="empty-icon">◌</span>
+              <h3 id="graph-empty-title">No network observations yet</h3>
+              <p id="graph-empty-copy">Refresh passive facts or run a standard scan.</p>
+              <div class="empty-actions hidden" id="graph-empty-actions">
+                <button class="button primary" id="graph-empty-deep" type="button">Run Deep scan</button>
+                <button class="button secondary" id="graph-empty-sources" type="button">Review sources</button>
+              </div>
+            </div>
+            <aside class="detail-drawer hidden" id="detail-drawer" aria-live="polite">
+              <button class="drawer-close" id="drawer-close" aria-label="Close details">×</button>
+              <span class="drawer-kind" id="drawer-kind">Device</span>
+              <h3 id="drawer-title">—</h3>
+              <p class="drawer-subtitle" id="drawer-subtitle"></p>
+              <div class="confidence-badge" id="drawer-confidence"></div>
+              <dl class="detail-list" id="drawer-metadata"></dl>
+              <section class="drawer-identity-section hidden" id="drawer-identity-section">
+                <div class="drawer-section-heading"><h4>Identity review</h4><span>Review</span></div>
+                <p id="drawer-identity-copy"></p>
+                <button class="table-link hidden" id="drawer-use-suggested-name" type="button">Use suggested name</button>
+                <button class="table-link hidden" id="drawer-apply-recommended-split" type="button">Split addresses into individual devices</button>
+              </section>
+              <section class="drawer-ports-section hidden" id="drawer-ports-section">
+                <div class="drawer-section-heading">
+                  <h4>Confirmed open ports</h4>
+                  <span id="drawer-port-count">0</span>
+                </div>
+                <div class="drawer-port-list" id="drawer-ports"></div>
+                <p class="drawer-port-changes hidden" id="drawer-port-changes"></p>
+                <p class="drawer-port-uncertain hidden" id="drawer-port-uncertain"></p>
+                <button class="table-link" id="drawer-open-ports" type="button">View in Open ports</button>
+              </section>
+              <section class="drawer-actions-section hidden" id="drawer-actions-section">
+                <h4>Address actions</h4>
+                <p id="drawer-actions-copy">Recheck one IPv4 address without scanning the whole range.</p>
+                <div class="editor-actions address-actions">
+                  <button class="button secondary" id="drawer-rescan-tcp" type="button"><span class="address-action-icon" aria-hidden="true">⇄</span>Scan TCP</button>
+                  <button class="button secondary" id="drawer-rescan-udp" type="button"><span class="address-action-icon" aria-hidden="true">≈</span>Scan UDP</button>
+                  <button class="button tertiary" id="drawer-export-target" type="button"><span class="address-action-icon" aria-hidden="true">↓</span>Export CSV</button>
+                </div>
+              </section>
+              <form class="device-editor hidden" id="device-editor">
+                <h4>Manual identity override</h4>
+                <label>Name<input id="device-name" maxlength="120"></label>
+                <label>Role<input id="device-role" maxlength="60"></label>
+                <label>Tags<input id="device-tags" placeholder="comma, separated" maxlength="400"></label>
+                <div class="editor-actions">
+                  <button class="button primary" type="submit">Save</button>
+                  <button class="button tertiary" id="merge-device" type="button">Merge…</button>
+                  <button class="button tertiary" id="split-device" type="button">Split IP…</button>
+                </div>
+              </form>
+              <h4>Evidence</h4>
+              <div class="evidence-list" id="drawer-evidence"></div>
+            </aside>
+            <div class="loading-overlay hidden" id="loading-overlay">
+              <div class="scanner-orbit"><span></span></div>
+              <strong id="loading-title">Scanning local network</strong>
+              <small id="loading-subtitle">This can take about a minute.</small>
+              <progress id="scan-progress" max="100" value="0"></progress>
+              <button class="button secondary hidden" id="cancel-scan" type="button">Cancel scan</button>
+            </div>
+          </div>
+          <div class="map-companion hidden" id="map-companion"></div>
+          <footer class="map-footer">
+            <span>Drag empty space to move · Scroll to zoom · Drag nodes to pin.</span>
+            <span id="graph-caption">—</span>
+          </footer>
+        </section>
+
+        <section class="panel ports-panel hidden" id="ports-section">
+          <div class="panel-header">
+            <div><p class="section-kicker">Latest service observations</p><h2>Open ports</h2></div>
+            <div class="ports-actions">
+              <label class="search-field">
+                <span aria-hidden="true">⌕</span>
+                <input id="port-search" type="search" placeholder="Search IP, port, service or device" autocomplete="off">
+              </label>
+              <label class="select-field compact-select">
+                <span>Protocol</span>
+                <select id="port-protocol-filter">
+                  <option value="all">All</option>
+                  <option value="tcp">TCP</option>
+                  <option value="udp">UDP</option>
+                </select>
+              </label>
+              <label class="select-field compact-select">
+                <span>State</span>
+                <select id="port-state-filter">
+                  <option value="confirmed">Confirmed</option>
+                  <option value="changed">No longer open</option>
+                  <option value="uncertain">Uncertain</option>
+                  <option value="all">All</option>
+                </select>
+              </label>
+              <button class="button secondary" id="ports-run-tcp" type="button">Scan TCP</button>
+              <button class="button primary" id="ports-run-udp" type="button">Scan UDP</button>
+              <button class="button tertiary" id="export-ports-csv" type="button">Export CSV</button>
+            </div>
+          </div>
+          <div class="port-stats">
+            <article><span>Confirmed open</span><strong id="port-stat-services">0</strong></article>
+            <article><span>Hosts with services</span><strong id="port-stat-hosts">0</strong></article>
+            <article><span>UDP uncertain</span><strong id="port-stat-uncertain">0</strong></article>
+            <article><span>Endpoint checks</span><strong id="port-stat-attempts">0</strong></article>
+            <article><span>New since comparable scan</span><strong id="port-stat-new">—</strong></article>
+            <article><span>No longer open / confirmed</span><strong id="port-stat-closed">—</strong></article>
+          </div>
+          <p class="ports-caption" id="ports-result-caption">TCP and UDP service discovery have not been run.</p>
+          <div class="ports-empty" id="ports-empty">
+            <span class="empty-icon">⇄</span>
+            <h3 id="ports-empty-title">No service discovery results yet</h3>
+            <p id="ports-empty-copy">Run TCP or UDP discovery to check every usable IP, including devices that ignore ICMP.</p>
+            <div class="empty-actions">
+              <button class="button secondary" id="ports-empty-tcp" type="button">Scan TCP</button>
+              <button class="button primary" id="ports-empty-udp" type="button">Scan UDP</button>
+            </div>
+          </div>
+          <div class="table-wrap hidden" id="ports-table-wrap">
+            <table class="ports-table">
+              <thead><tr><th>Address</th><th>Port</th><th>Protocol</th><th>State</th><th>Service</th><th>Device</th><th>Observed</th><th>Change</th><th>Latency</th><th>Evidence</th></tr></thead>
+              <tbody id="ports-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel inventory-panel hidden" id="inventory-section">
+          <div class="panel-header">
+            <div><p class="section-kicker">Current observation</p><h2>Device inventory</h2></div>
+            <div class="inventory-actions">
+              <span class="record-count" id="identity-review-summary">—</span>
+              <button class="button tertiary" id="export-inventory-csv" type="button">Export CSV</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Status</th><th>Device</th><th>Address</th><th>MAC</th><th>Role</th><th>Identity</th><th>Action</th></tr></thead>
+              <tbody id="inventory-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel evidence-panel hidden" id="evidence-section">
+          <div class="panel-header">
+            <div><p class="section-kicker">Raw observations</p><h2>Evidence ledger</h2></div>
+            <span class="record-count" id="evidence-count">0 records</span>
+          </div>
+          <div class="evidence-summary" id="evidence-summary"></div>
+          <div class="evidence-ledger" id="evidence-ledger"></div>
+        </section>
+
+        <section class="panel sources-panel hidden" id="sources-section">
+          <div class="panel-header">
+            <div><p class="section-kicker">Collector diagnostics</p><h2>Data sources</h2></div>
+            <span class="record-count" id="source-summary">—</span>
+          </div>
+          <div class="source-grid" id="source-grid"></div>
+          <div class="subsection-header">
+            <div><p class="section-kicker">Noise controls</p><h3>Network interfaces</h3></div>
+            <p>Choose which interfaces can appear on maps, contribute device identity, or be actively scanned.</p>
+          </div>
+          <div class="table-wrap">
+            <table class="interface-table">
+              <thead><tr><th>Interface</th><th>State</th><th>Addresses</th><th>Observed devices</th><th>Map</th><th>Identity</th><th>Scan</th></tr></thead>
+              <tbody id="interface-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel history-panel hidden" id="history-section">
+          <div class="panel-header">
+            <div><p class="section-kicker">Saved observations</p><h2>History timeline</h2></div>
+          </div>
+          <div class="history-compare">
+            <label>From<select id="history-from"></select></label>
+            <span aria-hidden="true">→</span>
+            <label>To<select id="history-to"></select></label>
+            <button class="button primary" id="compare-history" type="button">Compare</button>
+          </div>
+          <div class="history-result" id="history-result"></div>
+          <ol class="history-timeline" id="history-timeline"></ol>
+        </section>
+
+        <section class="panel automation-panel hidden" id="automation-section">
+          <div class="panel-header">
+            <div><p class="section-kicker">Recurring service discovery</p><h2>Automation</h2></div>
+            <span class="record-count" id="automation-summary">No schedules</span>
+          </div>
+          <div class="automation-grid">
+            <form class="automation-form" id="schedule-form">
+              <h3>Create a schedule</h3>
+              <p>Run bounded TCP or UDP discovery on an eligible private range. The first run establishes a baseline; later runs notify only newly opened ports.</p>
+              <label>Protocol<select id="schedule-protocol"><option value="tcp">TCP</option><option value="udp">UDP</option></select></label>
+              <label>IPv4 range<select id="schedule-cidr" required></select></label>
+              <label>Port preset<select id="schedule-preset" required></select></label>
+              <label>Additional custom ports<input id="schedule-custom-ports" placeholder="Examples: 8123, 9000-9003" autocomplete="off"></label>
+              <label>Interval<select id="schedule-interval"><option value="15">Every 15 minutes</option><option value="60" selected>Every hour</option><option value="360">Every 6 hours</option><option value="1440">Every day</option><option value="10080">Every week</option></select></label>
+              <button class="button primary" type="submit">Create schedule</button>
+            </form>
+            <section class="automation-notifications">
+              <div class="automation-heading"><div><p class="section-kicker">In-app alerts</p><h3>New ports</h3></div><button class="table-link hidden" id="mark-notifications-read" type="button">Mark all read</button></div>
+              <p>Notifications are created only when a scheduled run finds a port absent from the previous comparable scan.</p>
+              <div class="notification-list" id="notification-list"></div>
+            </section>
+          </div>
+          <div class="subsection-header"><div><p class="section-kicker">Saved jobs</p><h3>Schedules</h3></div><p>At most 10 schedules. Only one scan runs at a time; a due schedule is safely skipped when another scan is active.</p></div>
+          <div class="schedule-list" id="schedule-list"></div>
+        </section>
+
+        <section class="panel database-panel hidden" id="database-section">
+          <div class="panel-header">
+            <div><p class="section-kicker">Local state maintenance</p><h2>Database</h2></div>
+            <span class="record-count" id="database-summary">Reading database</span>
+          </div>
+          <div class="database-stats" aria-label="Database contents">
+            <article><strong id="database-stat-snapshots">—</strong><span>Snapshots</span></article>
+            <article><strong id="database-stat-overrides">—</strong><span>Identity changes</span></article>
+            <article><strong id="database-stat-layout">—</strong><span>Pinned positions</span></article>
+            <article><strong id="database-stat-automation">—</strong><span>Schedules and alerts</span></article>
+          </div>
+          <div class="database-actions">
+            <article class="database-action-card">
+              <div class="database-action-icon" aria-hidden="true">↓</div>
+              <div><p class="section-kicker">Portable backup</p><h3>Export database</h3></div>
+              <p>Download every saved snapshot, layout position, identity override, interface policy, schedule, and notification as a Boushun JSON database.</p>
+              <button class="button secondary" id="database-export" type="button">Download database</button>
+            </article>
+            <article class="database-action-card">
+              <div class="database-action-icon" aria-hidden="true">↑</div>
+              <div><p class="section-kicker">Validated replacement</p><h3>Import database</h3></div>
+              <p>Choose a Boushun database export. The file is validated and summarized before it can replace the current database.</p>
+              <input class="database-file-input" id="database-file" type="file" accept="application/json,.json">
+              <div class="database-card-actions">
+                <label class="button secondary" for="database-file">Choose JSON file</label>
+                <button class="button primary" id="database-import" type="button" disabled>Import database</button>
+              </div>
+              <div class="database-import-preview" id="database-import-preview" role="status">No file selected.</div>
+            </article>
+            <article class="database-action-card danger-zone">
+              <div class="database-action-icon" aria-hidden="true">×</div>
+              <div><p class="section-kicker">Destructive action</p><h3>Reset database</h3></div>
+              <p>Remove all Boushun observations and saved UI state. OUI data and external Kubernetes, controller, and SNMP configuration files are not changed.</p>
+              <button class="button danger" id="database-reset" type="button">Reset database</button>
+            </article>
+          </div>
+          <p class="database-safety-note">Import and reset are unavailable while a scan is running. Boushun creates a local pre-change backup and retains the five newest database backups.</p>
+        </section>
+
+        <section class="bottom-grid">
+          <article class="panel changes-panel">
+            <div class="panel-header compact">
+              <div><p class="section-kicker">Since previous observation</p><h2>Changes</h2></div>
+            </div>
+            <div class="change-list" id="change-list"></div>
+          </article>
+          <article class="panel scope-panel">
+            <div class="panel-header compact">
+              <div><p class="section-kicker">Safety boundary</p><h2>Scan scope</h2></div>
+            </div>
+            <div id="scope-list" class="scope-list"></div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="scan-dialog">
+      <form method="dialog" id="scan-form">
+        <button class="dialog-close" value="cancel" aria-label="Close">×</button>
+        <span class="dialog-icon">⌁</span>
+        <p class="section-kicker">Standard profile</p>
+        <h2>Scan the local segment?</h2>
+        <p class="dialog-copy">Boushun sends one bounded ICMP probe to each usable address, then refreshes local evidence. Deep mode also listens briefly for mDNS/SSDP and reads configured SNMPv3 targets. It never scans ports or changes devices.</p>
+        <label class="dialog-label" for="scan-profile">Scan depth</label>
+        <select id="scan-profile" name="profile">
+          <option value="standard">Standard · ICMP + local APIs</option>
+          <option value="deep">Deep · add mDNS, SSDP, SNMPv3</option>
+        </select>
+        <label class="dialog-label spaced" for="scan-cidr">Allowed IPv4 range</label>
+        <select id="scan-cidr" name="cidr" required></select>
+        <div class="scan-facts">
+          <span><strong>Maximum</strong> 254 targets</span>
+          <span><strong>Timeout</strong> about 60 seconds</span>
+          <span><strong>Writes</strong> none</span>
+        </div>
+        <div class="dialog-actions">
+          <button class="button tertiary" value="cancel">Cancel</button>
+          <button class="button primary" id="confirm-scan" value="default">Start scan</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="service-dialog">
+      <form method="dialog" id="service-form">
+        <button class="dialog-close" value="cancel" aria-label="Close">×</button>
+        <span class="dialog-icon">⇄</span>
+        <p class="section-kicker">Independent service discovery</p>
+        <h2>Discover TCP services?</h2>
+        <p class="dialog-copy">Boushun attempts a normal TCP connection to every usable IP in the selected range, including hosts that ignore ICMP. Successful connections are closed immediately without sending an application payload. These connections may appear in device or firewall logs.</p>
+        <label class="dialog-label" for="service-cidr">Allowed IPv4 range</label>
+        <select id="service-cidr" name="cidr" required></select>
+        <label class="dialog-label spaced" for="service-preset">Port preset</label>
+        <select id="service-preset" name="preset"></select>
+        <p class="preset-description" id="service-preset-description"></p>
+        <label class="dialog-label spaced" for="service-custom-ports">Additional custom ports</label>
+        <input id="service-custom-ports" name="customPorts" placeholder="Examples: 8123, 9000-9003" autocomplete="off" spellcheck="false">
+        <p class="field-help">Comma-separated ports or ranges. Custom ports are added to the selected preset. Maximum 64 unique ports.</p>
+        <div class="service-scan-summary" id="service-scan-summary">Select a range and preset.</div>
+        <div class="scan-facts">
+          <span><strong>Targets</strong> every usable IP</span>
+          <span><strong>Protocol</strong> TCP connect only</span>
+          <span><strong>Payload</strong> none</span>
+        </div>
+        <div class="dialog-actions">
+          <button class="button tertiary" value="cancel">Cancel</button>
+          <button class="button primary" id="confirm-service-scan" value="default">Start discovery</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="udp-dialog">
+      <form method="dialog" id="udp-form">
+        <button class="dialog-close" value="cancel" aria-label="Close">×</button>
+        <span class="dialog-icon">≈</span>
+        <p class="section-kicker">Independent service discovery</p>
+        <h2>Discover UDP services?</h2>
+        <p class="dialog-copy">Boushun sends a bounded, read-only protocol probe to every usable IP. A valid UDP reply confirms an open service. No response is reported as open or filtered and is never added to the topology.</p>
+        <label class="dialog-label" for="udp-cidr">Allowed IPv4 range</label>
+        <select id="udp-cidr" name="cidr" required></select>
+        <label class="dialog-label spaced" for="udp-preset">Port preset</label>
+        <select id="udp-preset" name="preset"></select>
+        <p class="preset-description" id="udp-preset-description"></p>
+        <label class="dialog-label spaced" for="udp-custom-ports">Additional custom ports</label>
+        <input id="udp-custom-ports" name="customPorts" placeholder="Examples: 5355, 9000-9003" autocomplete="off" spellcheck="false">
+        <p class="field-help">Known ports use a protocol-specific probe. Other ports receive an empty datagram. Maximum 16 unique ports.</p>
+        <div class="service-scan-summary" id="udp-scan-summary">Select a range and preset.</div>
+        <div class="scan-facts">
+          <span><strong>Targets</strong> every usable IP</span>
+          <span><strong>Rate limit</strong> 50 packets/sec</span>
+          <span><strong>Retry</strong> once on timeout</span>
+        </div>
+        <div class="dialog-actions">
+          <button class="button tertiary" value="cancel">Cancel</button>
+          <button class="button primary" id="confirm-udp-scan" value="default">Start discovery</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast hidden" id="toast" role="status"></div>
+    <script type="module" src="/app.js?v=0.1.0-ui1"></script>
+  </body>
+</html>

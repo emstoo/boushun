@@ -1,0 +1,8 @@
+data
+node_modules
+.git
+.env
+compose.override.yaml
+config/snmp-targets.json
+config/kubeconfig
+npm-debug.log

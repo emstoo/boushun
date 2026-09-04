@@ -1,0 +1,16 @@
+{
+  "targets": [
+    {
+      "host": "192.168.50.10",
+      "port": 161,
+      "user": "boushun-readonly",
+      "level": "authPriv",
+      "authProtocol": "sha256",
+      "authKey": "REPLACE_AT_INSTALL_TIME",
+      "privProtocol": "aes",
+      "privKey": "REPLACE_AT_INSTALL_TIME",
+      "timeout": 2500,
+      "retries": 1
+    }
+  ]
+}

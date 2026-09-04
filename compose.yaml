@@ -1,0 +1,28 @@
+name: boushun
+
+services:
+  boushun:
+    build:
+      context: .
+    network_mode: host
+    init: true
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
+    environment:
+      BOUSHUN_HOST: 127.0.0.1
+      BOUSHUN_PORT: ${BOUSHUN_PORT:-4177}
+      BOUSHUN_DATA_DIR: /data
+      BOUSHUN_ALLOWED_CIDRS: ${BOUSHUN_ALLOWED_CIDRS:?Copy .env.example to .env and set BOUSHUN_ALLOWED_CIDRS}
+    volumes:
+      - boushun-data:/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+
+volumes:
+  boushun-data:
