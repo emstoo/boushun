@@ -63,8 +63,8 @@ jobs:
         run: npm run test:e2e
       - name: Verify synthetic screenshot generation
         run: npm run screenshots
-      - name: Verify generated screenshots are current
-        run: git diff --exit-code -- docs/images
+      - name: Validate generated screenshot artifacts
+        run: npm run verify:screenshots
 
   container:
     name: Container acceptance
@@ -95,7 +95,7 @@ jobs:
           test "$(docker container inspect --format '{{.HostConfig.NetworkMode}}' "$container_id")" = "host"
           test "$(docker container inspect --format '{{json .HostConfig.SecurityOpt}}' "$container_id")" = '["no-new-privileges:true"]'
           test "$(docker container inspect --format '{{json .HostConfig.CapDrop}}' "$container_id")" = '["ALL"]'
-          test "$(docker container inspect --format '{{json .HostConfig.CapAdd}}' "$container_id")" = '["NET_RAW"]'
+          test "$(docker container inspect --format '{{json .HostConfig.CapAdd}}' "$container_id")" = '["CAP_NET_RAW"]'
           test "$(docker container inspect --format '{{.State.Health.Status}}' "$container_id")" = "healthy"
           test "$(docker container inspect --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Type}}:{{.RW}}{{end}}{{end}}' "$container_id")" = "volume:true"
           tmpfs_options="$(docker container inspect --format '{{index .HostConfig.Tmpfs "/tmp"}}' "$container_id")"

@@ -72,9 +72,10 @@ npm run check
 npx playwright install chromium
 npm run test:e2e
 npm run screenshots
+npm run verify:screenshots
 ```
 
-`npm run check` covers syntax, unit, component, store, and loopback API tests. Browser acceptance and screenshot generation use only the bundled synthetic fixture. Live ICMP, TCP, UDP, multicast, SNMP, Kubernetes, and controller acceptance must be run separately in an explicitly authorized environment.
+`npm run check` covers syntax, unit, component, store, and loopback API tests. Browser acceptance and screenshot generation use only the bundled synthetic fixture. Screenshot verification checks the generated PNG structure, expected width, minimum height, and absence of textual metadata. Live ICMP, TCP, UDP, multicast, SNMP, Kubernetes, and controller acceptance must be run separately in an explicitly authorized environment.
 
 Coverage, environments, priorities, and release gates are defined in the [test design](docs/test-design.md).
 

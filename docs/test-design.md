@@ -339,7 +339,7 @@ After each injected failure, verify that the process remains responsive, `state.
 The public CI gate runs three independent jobs:
 
 1. `npm run check` on every supported Node.js release line for syntax, unit, component, store, and loopback API tests.
-2. `npm run test:e2e` in Chromium against a fixed-clock synthetic snapshot, followed by `npm run screenshots` to prove the published images remain reproducible without a real LAN.
+2. `npm run test:e2e` in Chromium against a fixed-clock synthetic snapshot, followed by `npm run screenshots` and `npm run verify:screenshots` to validate generated PNG dimensions and reject textual metadata without requiring a real LAN. Exact image bytes are not compared across operating systems because browser rendering and fonts vary by runner.
 3. Container acceptance for the non-root user, read-only root filesystem, host networking, capability boundary, health check, persistent volume, and restricted temporary filesystem.
 
 Live ICMP, TCP, UDP, multicast, SNMP, and external Kubernetes/controller acceptance is intentionally excluded from public CI. Run those checks only in an explicitly authorized isolated Linux environment and record the scope and result for the release.
