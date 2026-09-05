@@ -70,44 +70,14 @@ jobs:
     name: Container acceptance
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    env:
-      BOUSHUN_ALLOWED_CIDRS: 192.168.50.0/24
-      BOUSHUN_PORT: 45177
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Validate Dockerfile
-        run: docker build --check .
-      - name: Validate Compose configuration
-        run: docker compose config --quiet
-      - name: Build image
-        run: docker compose --project-name boushun-ci build
-      - name: Start container and wait for health
-        run: docker compose --project-name boushun-ci up --detach --no-build --wait --wait-timeout 60
-      - name: Verify runtime boundaries
-        run: |
-          container_id="$(docker compose --project-name boushun-ci ps --quiet boushun)"
-          test -n "$container_id"
-          test "$(docker container inspect --format '{{.Config.User}}' "$container_id")" = "node"
-          test "$(docker container inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$container_id")" = "true"
-          test "$(docker container inspect --format '{{.HostConfig.NetworkMode}}' "$container_id")" = "host"
-          test "$(docker container inspect --format '{{json .HostConfig.SecurityOpt}}' "$container_id")" = '["no-new-privileges:true"]'
-          test "$(docker container inspect --format '{{json .HostConfig.CapDrop}}' "$container_id")" = '["ALL"]'
-          test "$(docker container inspect --format '{{json .HostConfig.CapAdd}}' "$container_id")" = '["CAP_NET_RAW"]'
-          test "$(docker container inspect --format '{{.State.Health.Status}}' "$container_id")" = "healthy"
-          test "$(docker container inspect --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Type}}:{{.RW}}{{end}}{{end}}' "$container_id")" = "volume:true"
-          tmpfs_options="$(docker container inspect --format '{{index .HostConfig.Tmpfs "/tmp"}}' "$container_id")"
-          test -n "$tmpfs_options"
-          case ",$tmpfs_options," in
-            *,noexec,*) ;;
-            *) exit 1 ;;
-          esac
-          case ",$tmpfs_options," in
-            *,nosuid,*) ;;
-            *) exit 1 ;;
-          esac
-      - name: Remove acceptance resources
-        if: always()
-        run: docker compose --project-name boushun-ci down --volumes --remove-orphans
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Verify isolated collection, runtime boundaries, and persistence
+        run: npm run test:container

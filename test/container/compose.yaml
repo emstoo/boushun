@@ -1,0 +1,32 @@
+# Merge after compose.yaml. Only this synthetic namespace receives test traffic.
+services:
+  boushun:
+    network_mode: service:fixture
+    restart: "no"
+    depends_on:
+      fixture:
+        condition: service_healthy
+    volumes:
+      - ./test/container:/acceptance:ro
+      - ./test/container/resolv.conf:/etc/resolv.conf:ro
+
+  fixture:
+    image: boushun-ci-boushun
+    network_mode: none
+    user: root
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ./test/container:/acceptance:ro
+    command: ["node", "/acceptance/fixture.mjs"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:45178').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 1s
+      timeout: 3s
+      retries: 10
