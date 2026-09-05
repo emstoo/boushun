@@ -17,7 +17,11 @@ export async function readSnmpTargets(filePath) {
     return (Array.isArray(document) ? document : document.targets ?? []).map(validateTarget);
   } catch (error) {
     if (error.code === "ENOENT") return [];
-    throw error;
+    // JSON parser diagnostics can include credential-bearing input fragments.
+    // Never propagate the original message or cause outside this boundary.
+    const safeError = new Error("Unable to read or validate SNMP configuration");
+    safeError.code = "SNMP_CONFIG_ERROR";
+    throw safeError;
   }
 }
 

@@ -33,6 +33,7 @@ test("[TCP-05, TCP-07] TCP service discovery checks every usable IP without ICMP
   };
   const result = await collectTcpServices({
     cidr: "192.168.50.0/30",
+    allowedCIDRs: ["192.168.50.0/24"],
     ports: [80, 443],
     connector,
     observedAt: "2026-08-21T00:00:00.000Z",
@@ -70,6 +71,7 @@ test("[NET-03, NET-05, TCP-04] invalid TCP scope or port limits open zero connec
   await assert.rejects(collectTcpServices({
     cidr: "192.168.50.0/24",
     ports: Array.from({ length: 65 }, (_, index) => index + 1),
+    allowedCIDRs: ["192.168.50.0/24"],
     connector,
   }), /64 unique ports/);
   assert.equal(calls, 0);
@@ -80,6 +82,7 @@ test("[TCP-04] maximum valid TCP coverage remains deterministic and within the h
   const result = await collectTcpServices({
     cidr: "192.168.50.0/24",
     ports: Array.from({ length: 64 }, (_, index) => index + 1),
+    allowedCIDRs: ["192.168.50.0/24"],
     connector: async () => {
       calls += 1;
       return { state: "closed" };
@@ -97,7 +100,7 @@ test("[TCP-08] TCP service discovery cancellation prevents a partial result", as
     const abort = () => reject(Object.assign(new Error("cancelled"), { name: "AbortError" }));
     signal.addEventListener("abort", abort, { once: true });
   });
-  const pending = collectTcpServices({ cidr: "192.168.50.0/30", ports: [80], connector, signal: controller.signal });
+  const pending = collectTcpServices({ cidr: "192.168.50.0/30", allowedCIDRs: ["192.168.50.0/24"], ports: [80], connector, signal: controller.signal });
   controller.abort();
   await assert.rejects(pending, { name: "AbortError" });
 });

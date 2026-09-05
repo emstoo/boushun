@@ -36,6 +36,7 @@ test("[UDP-05, UDP-10] UDP discovery checks every usable IP and separates uncert
   const result = await collectUdpServices({
     cidr: "192.168.50.0/30",
     ports: [53, 9999],
+    allowedCIDRs: ["192.168.50.0/24"],
     retryCount: 0,
     rateLimitPerSecond: 1_000,
     prober: async (address, port) => {
@@ -68,10 +69,11 @@ test("[NET-03, NET-05, UDP-03] invalid UDP scope or port limits send zero datagr
     ports: [53],
     prober,
   }), /BOUSHUN_ALLOWED_CIDRS/);
-  await assert.rejects(collectUdpServices({ cidr: "192.168.50.0/24", ports: [161], prober }), /excluded/);
+  await assert.rejects(collectUdpServices({ cidr: "192.168.50.0/24", allowedCIDRs: ["192.168.50.0/24"], ports: [161], prober }), /excluded/);
   await assert.rejects(collectUdpServices({
     cidr: "192.168.50.0/24",
     ports: Array.from({ length: 17 }, (_, index) => index + 1),
+    allowedCIDRs: ["192.168.50.0/24"],
     prober,
   }), /16 unique ports/);
   assert.equal(calls, 0);
@@ -98,6 +100,7 @@ test("[UDP-06] UDP discovery retries only a timeout", async () => {
   const result = await collectUdpServices({
     cidr: "192.168.50.0/30",
     ports: [9999],
+    allowedCIDRs: ["192.168.50.0/24"],
     retryCount: 1,
     retryDelayMs: -250,
     rateLimitPerSecond: 1_000,
@@ -118,6 +121,7 @@ test("[UDP-07] two UDP timeouts remain uncertain and never create a confirmed en
   const result = await collectUdpServices({
     cidr: "192.168.50.7/32",
     ports: [9999],
+    allowedCIDRs: ["192.168.50.0/24"],
     retryCount: 1,
     retryDelayMs: -250,
     rateLimitPerSecond: 1_000,
@@ -134,6 +138,7 @@ test("[UDP-09] UDP discovery cancellation prevents a partial result", async () =
   await assert.rejects(collectUdpServices({
     cidr: "192.168.50.0/30",
     ports: [53, 123],
+    allowedCIDRs: ["192.168.50.0/24"],
     retryCount: 0,
     rateLimitPerSecond: 1_000,
     signal: controller.signal,

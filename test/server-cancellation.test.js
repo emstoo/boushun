@@ -85,6 +85,7 @@ async function startServer(t, options) {
     port: 0,
     dataDirectory: directory,
     startScheduler: false,
+    allowedCIDRs: ["192.168.50.0/24"],
     ...options,
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
