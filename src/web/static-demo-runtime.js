@@ -11,14 +11,15 @@ window.fetch = async (input, init = {}) => {
   if (!url.pathname.includes("/api/")) return originalFetch(input, init);
 
   const method = String(init.method ?? request?.method ?? "GET").toUpperCase();
+  const route = apiRoute(url.pathname);
   if (method !== "GET") {
+    if (route === "/api/layout" && method === "PUT") return jsonResponse(200, { saved: false, demo: true });
     return jsonResponse(405, {
       error: "Static demo is read-only. This action is available in a local Boushun installation.",
     });
   }
 
   const fixture = await fixturePromise;
-  const route = apiRoute(url.pathname);
   if (!(route in fixture.routes)) return jsonResponse(404, { error: "Demo endpoint not available" });
   return jsonResponse(200, fixture.routes[route]);
 };
@@ -33,6 +34,9 @@ const blockedSelectors = [
   "#ports-empty-tcp",
   "#ports-empty-udp",
   "#graph-empty-deep",
+  "#scan-form",
+  "#service-form",
+  "#udp-form",
   "#confirm-scan",
   "#confirm-service-scan",
   "#confirm-udp-scan",
@@ -42,16 +46,19 @@ const blockedSelectors = [
   "#drawer-rescan-udp",
   "#drawer-use-suggested-name",
   "#drawer-apply-recommended-split",
+  "#device-editor",
   "#device-editor input",
   "#device-editor button",
   "#merge-device",
   "#split-device",
+  "#schedule-form",
   "#schedule-form input",
   "#schedule-form select",
   "#schedule-form button",
   ".schedule-run",
   ".schedule-delete",
   "#mark-notifications-read",
+  "#database-export",
   "#database-file",
   "#database-import",
   "#database-reset",
@@ -84,9 +91,9 @@ function jsonResponse(status, body) {
 
 function lockMutatingControls() {
   for (const control of document.querySelectorAll(blockedSelectors)) {
-    if ("disabled" in control) control.disabled = true;
-    control.setAttribute("aria-disabled", "true");
-    control.title = readOnlyMessage;
+    if ("disabled" in control && !control.disabled) control.disabled = true;
+    if (control.getAttribute("aria-disabled") !== "true") control.setAttribute("aria-disabled", "true");
+    if (control.title !== readOnlyMessage) control.title = readOnlyMessage;
   }
 }
 
