@@ -26,8 +26,8 @@ test("[NET-01, NET-02] IPv4 and CIDR parsing returns canonical facts and rejects
 });
 
 test("[NET-03, NET-04, NET-05] scan safety rejects broad, non-local, and partially allowed ranges", () => {
-  assert.equal(assertSafeScanCIDR("192.168.50.0/24").canonical, "192.168.50.0/24");
-  assert.equal(assertSafeScanCIDR("169.254.1.0/24").canonical, "169.254.1.0/24");
+  assert.equal(assertSafeScanCIDR("192.168.50.0/24", ["192.168.50.0/24"]).canonical, "192.168.50.0/24");
+  assert.equal(assertSafeScanCIDR("169.254.1.0/24", ["169.254.1.0/24"]).canonical, "169.254.1.0/24");
   assert.equal(assertSafeScanCIDR("192.168.50.128/25", ["192.168.50.0/24"]).canonical, "192.168.50.128/25");
   assert.equal(assertSafeScanCIDR("192.168.50.0/24", ["192.168.50.0/24"]).canonical, "192.168.50.0/24");
   assert.throws(() => assertSafeScanCIDR("192.168.10.0/23"), /\/24/);
@@ -41,6 +41,12 @@ test("[NET-03, NET-04, NET-05] scan safety rejects broad, non-local, and partial
     () => assertSafeScanCIDR("192.168.50.0/24", ["192.168.50.0/25"]),
     /BOUSHUN_ALLOWED_CIDRS/,
   );
+});
+
+test("[NET-05] missing, empty, and malformed allowlists fail closed", () => {
+  for (const allowed of [undefined, null, [], [""], [" "], ["invalid"], ["192.168.50.0/24", "invalid"], "192.168.50.0/24"]) {
+    assert.throws(() => assertSafeScanCIDR("192.168.50.1/32", allowed), { code: "BAD_REQUEST" });
+  }
 });
 
 test("[NET-06, NET-07, NET-08] host enumeration handles ordinary, /31, and /32 ranges", () => {

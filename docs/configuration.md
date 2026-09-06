@@ -9,7 +9,7 @@ Run commands in this document from the repository root. Relative paths are resol
 | `BOUSHUN_HOST` | `127.0.0.1` | Loopback HTTP listen address (`127.0.0.1`, `::1`, or `localhost`) |
 | `BOUSHUN_PORT` | `4177` | HTTP listen port |
 | `BOUSHUN_DATA_DIR` | repository `data/` or container `/data` | State directory |
-| `BOUSHUN_ALLOWED_CIDRS` | detected private scope | Comma-separated scan boundary |
+| `BOUSHUN_ALLOWED_CIDRS` | unset; active scans disabled | Comma-separated IPv4 CIDRs; the entire requested scan range must be allowed |
 | `BOUSHUN_DHCP_LEASE_PATHS` | known dnsmasq paths | Colon-separated dnsmasq, ISC, or Kea lease files |
 | `KUBECONFIG` | standard kubeconfig search | Optional path used by the Kubernetes client |
 | `BOUSHUN_OUI_PATH` | `$BOUSHUN_DATA_DIR/oui.csv` | IEEE MA-L CSV |

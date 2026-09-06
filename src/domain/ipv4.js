@@ -98,17 +98,16 @@ export function assertSafeScanCIDR(value, allowedCIDRs = []) {
     throw validationError("Only private or link-local IPv4 ranges can be scanned");
   }
 
-  if (allowedCIDRs.length) {
-    const permitted = allowedCIDRs.some((candidate) => {
-      const allowed = parseCIDR(candidate);
-      return (
-        allowed &&
-        cidr.networkInt >= allowed.networkInt &&
-        cidr.broadcastInt <= allowed.broadcastInt
-      );
-    });
-    if (!permitted) throw validationError("The requested range is outside BOUSHUN_ALLOWED_CIDRS");
+  if (!Array.isArray(allowedCIDRs) || !allowedCIDRs.length) {
+    throw validationError("Set BOUSHUN_ALLOWED_CIDRS before starting an active scan");
   }
+  const allowedRanges = allowedCIDRs.map(parseCIDR);
+  if (allowedRanges.some((allowed) => !allowed)) {
+    throw validationError("BOUSHUN_ALLOWED_CIDRS must contain valid IPv4 CIDRs");
+  }
+  const permitted = allowedRanges.some((allowed) =>
+    cidr.networkInt >= allowed.networkInt && cidr.broadcastInt <= allowed.broadcastInt);
+  if (!permitted) throw validationError("The requested range is outside BOUSHUN_ALLOWED_CIDRS");
 
   return cidr;
 }

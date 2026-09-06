@@ -82,6 +82,7 @@ test("[COL-08, COL-09] standard collection probes only the validated host range 
   const snapshot = await collectLinux({
     profile: "standard",
     cidr: "192.168.44.0/30",
+    allowedCIDRs: ["192.168.44.0/30"],
     runner,
     textReader,
     reverseLookup: async () => ["gateway.home.arpa."],

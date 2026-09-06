@@ -41,6 +41,7 @@ test("[COL-11, EXT-06, EXT-14] Deep orchestration composes independent discovery
   const snapshot = await collectNetwork({
     profile: "deep",
     cidr: "192.168.44.0/30",
+    allowedCIDRs: ["192.168.44.0/30"],
     runner: fixtureRunner,
     textReader: async () => "nameserver 192.168.44.2\n",
     reverseLookup: async () => [],

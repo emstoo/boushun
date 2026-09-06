@@ -74,7 +74,7 @@ Do not use real credentials in test SNMP configuration or kubeconfig files. Secr
 
 ### Network test isolation
 
-- Unit and CI tests replace connectors, probers, runners, APIs, and sessions. Observe destination, count, ordering, timeout, abort, and close behavior at those boundaries.
+- Unit and component tests replace connectors, probers, runners, APIs, and sessions. Observe destination, count, ordering, timeout, abort, and close behavior at those boundaries. Container CI additionally exercises real collection in a disconnected synthetic network namespace.
 - Tests using real sockets are restricted to loopback or a dedicated network namespace/isolated LAN.
 - Acceptance tests for multicast, ICMP, and SNMP require prior authorization for both the target CIDR and devices.
 - Even in acceptance tests, constrain `BOUSHUN_ALLOWED_CIDRS` to the smallest range and verify that no packets are sent to public addresses through packet capture or a fake boundary.
@@ -89,7 +89,7 @@ Do not use real credentials in test SNMP configuration or kubeconfig files. Secr
 | NET-02 | P0 | Provide missing octets, non-digits, octets above 255, missing prefixes, or prefixes above 32 | Input is rejected before reaching any scan operation |
 | NET-03 | P0 | Request a range broader than `/24` | Request is rejected as too broad and sends zero packets |
 | NET-04 | P0 | Request public, loopback, or mixed private/public ranges | Anything outside private or link-local IPv4 is rejected |
-| NET-05 | P0 | Request a range inside, equal to, outside, or partially overlapping an allowed CIDR | Only fully contained ranges are accepted |
+| NET-05 | P0 | Request a range inside, equal to, outside, or partially overlapping an allowed CIDR; omit, empty, or malform the allowlist | Only fully contained ranges with a valid nonempty allowlist are accepted; invalid configuration sends no probes |
 | NET-06 | P0 | Enumerate an ordinary subnet | Network and broadcast are excluded; each usable address appears once |
 | NET-07 | P1 | Enumerate `/31` and `/32` | All addresses defined as usable by the product are returned without overflow or an infinite loop |
 | NET-08 | P1 | Exclude a local address | Only the selected address is excluded; order and remaining addresses are preserved |
@@ -127,7 +127,7 @@ Do not use real credentials in test SNMP configuration or kubeconfig files. Secr
 | EXT-07 | P1 | A controller file is missing, malformed, or partial | Preserve results from other files, mark the source degraded, and return a safe file-specific warning |
 | EXT-08 | P0 | A controller document contains an out-of-schema secret marker | The marker never reaches a public API or evidence record; treat this as a security acceptance gate |
 | EXT-09 | P1 | Receive duplicate or malformed mDNS/SSDP packets or a socket error | Deduplicate valid replies, ignore malformed packets, and close sockets at timeout or abort |
-| EXT-10 | P0 | SNMP host/user/auth/priv fields are incomplete | Reject invalid configuration before scanning and omit key values from errors |
+| EXT-10 | P0 | SNMP host/user/auth/priv fields are incomplete, or credential-bearing JSON is malformed | Reject invalid configuration before scanning; expose only a fixed safe error, never parser excerpts or file paths |
 | EXT-11 | P1 | SNMP system/IF-MIB/LLDP/FDB reads succeed | Normalize system, interface, LLDP neighbor, bridge port, and FDB data and always close the session |
 | EXT-12 | P1 | Some SNMP targets fail | Preserve successful targets, warn for failed targets, and close every session |
 | EXT-13 | P0 | An SNMP error contains a key name and value | Redact the value from APIs, evidence, warnings, and logs |
@@ -340,9 +340,11 @@ The public CI gate runs three independent jobs:
 
 1. `npm run check` on every supported Node.js release line for syntax, unit, component, store, and loopback API tests.
 2. `npm run test:e2e` in Chromium against a fixed-clock synthetic snapshot, followed by `npm run screenshots` and `npm run verify:screenshots` to validate generated PNG dimensions and reject textual metadata without requiring a real LAN. Exact image bytes are not compared across operating systems because browser rendering and fonts vary by runner.
-3. Container acceptance for the non-root user, read-only root filesystem, host networking, capability boundary, health check, persistent volume, and restricted temporary filesystem.
+3. `npm run test:container` builds the production image and validates the production Compose host-network configuration. Runtime checks share a disconnected synthetic fixture's network namespace: passive collection must discover its dummy interface, ICMP must succeed, and a TCP scan must find its service. The application retains its non-root user, read-only root filesystem, `NET_RAW`-only capability boundary, health check, persistent volume, and restricted temporary filesystem. Writes to the root filesystem and execution from `/tmp` must actually fail. Recreating the application container must preserve exported state and layout. Only the isolated fixture receives `NET_ADMIN` to create the dummy interface; neither container can reach the host LAN. The script ignores local overrides and `.env`, refuses an existing `boushun-ci` project or data volume, and removes its synthetic containers and volume on completion or test failure.
 
-Live ICMP, TCP, UDP, multicast, SNMP, and external Kubernetes/controller acceptance is intentionally excluded from public CI. Run those checks only in an explicitly authorized isolated Linux environment and record the scope and result for the release.
+CodeQL default setup runs independently of these jobs. The default branch also has an active code-scanning ruleset requiring CodeQL results, with `errors` and `high_or_higher` alert thresholds; its intended configuration is tracked in [the ruleset file](../.github/code-scanning-ruleset.json). The file alone does not activate GitHub enforcement. Existing functional checks and the no-bypass policy remain required.
+
+Real host-LAN behavior, UDP, multicast, SNMP, and external Kubernetes/controller acceptance is intentionally excluded from public CI. Run those checks only in an explicitly authorized isolated Linux environment and record the scope and result for the release. The synthetic container checks do not prove compatibility with those external integrations.
 
 Progression requires all P0 tests to pass. A P1 failure must be explicitly accepted with cause, impact, and workaround. Any unexplained timeout, partial failure, data discrepancy, resource leak, or credential-marker appearance blocks progression. A timeout that passes on retry is not accepted until its cause is understood.
 

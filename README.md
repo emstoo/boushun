@@ -71,11 +71,16 @@ Active discovery is disabled unless its complete target range is covered by `BOU
 npm run check
 npx playwright install chromium
 npm run test:e2e
+npm run test:container
 npm run screenshots
 npm run verify:screenshots
 ```
 
-`npm run check` covers syntax, unit, component, store, and loopback API tests. Browser acceptance and screenshot generation use only the bundled synthetic fixture. Screenshot verification checks the generated PNG structure, expected width, minimum height, and absence of textual metadata. Live ICMP, TCP, UDP, multicast, SNMP, Kubernetes, and controller acceptance must be run separately in an explicitly authorized environment.
+`npm run check` covers syntax, unit, component, store, and loopback API tests. Browser acceptance and screenshot generation use only the bundled synthetic fixture. Screenshot verification checks the generated PNG structure, expected width, minimum height, and absence of textual metadata.
+
+`npm run test:container` requires Docker Engine and Compose on Linux. It builds the production image and verifies passive collection, real ICMP and TCP traffic, runtime restrictions, and data persistence across container recreation in a disconnected synthetic network namespace. It ignores local Compose overrides and `.env`, requires the `boushun-ci` project and its data volume to be unused, and removes its test containers and volume afterward. Production host networking is checked in the rendered configuration; real LAN behavior, UDP, multicast, SNMP, Kubernetes, and controller acceptance still require a separately authorized environment.
+
+On `SIGINT` (Ctrl+C) or `SIGTERM`, container acceptance stops the active CLI process group, waits for it to close, then cleans up its test resources and exits unsuccessfully. Repeated signals do not interrupt cleanup. An existing project rejected during preflight is never removed. Cleanup failures are reported explicitly; `SIGKILL`, loss of the Docker daemon, or host shutdown can still leave resources behind and require inspection before rerunning.
 
 Coverage, environments, priorities, and release gates are defined in the [test design](docs/test-design.md).
 

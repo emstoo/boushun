@@ -10,6 +10,7 @@ test("HTTP integration contract", async (t) => {
   const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "boushun-test-"));
   let tcpOpen = true;
   const { server } = await createBoushunServer({
+    allowedCIDRs: ["192.168.50.0/24"],
     host: "127.0.0.1",
     port: 0,
     dataDirectory: temporaryDirectory,
