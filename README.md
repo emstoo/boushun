@@ -15,6 +15,14 @@ Boushun keeps raw observations on the probe, distinguishes facts from inference,
 
 See the [feature reference](docs/features.md) for the complete capability list.
 
+## Live demo
+
+[Open the static read-only demo](https://emstoo.github.io/boushun/).
+
+The GitHub Pages demo is generated entirely from bundled synthetic observations. It does not connect to, inspect, or scan a real LAN, and actions that would change Boushun state are disabled. Topology navigation, search, filters, node inspection, pan/zoom, and client-side exports remain available for exploring the interface.
+
+The public demo is a generated static artifact, not a remotely exposed Boushun server. Live LAN collection still requires running Boushun locally as described below.
+
 ## Screenshots
 
 ![Boushun topology view generated from synthetic demo data](docs/images/topology.png)
@@ -22,6 +30,20 @@ See the [feature reference](docs/features.md) for the complete capability list.
 ![Boushun open ports view generated from synthetic demo data](docs/images/open-ports.png)
 
 Both screenshots are generated from a fixed-clock synthetic network by `npm run screenshots`. They contain no observations from a real LAN and can be reproduced as part of the release checks.
+
+## Static read-only demo
+
+Generate the same public-demo artifact locally with:
+
+```console
+npm run demo:build
+```
+
+The command writes a static site to `dist/demo/`. During the build, Boushun starts only on loopback with a temporary store, projects the bundled synthetic collector through the normal server APIs, captures the resulting state/history/database/automation responses, and then shuts the server down. The generated site serves those captured responses in the browser and rejects mutating API calls.
+
+On pushes to `main`, the Pages workflow builds `dist/demo/` and deploys that artifact to `https://emstoo.github.io/boushun/`. Generated assets use relative paths so the site works below the GitHub Pages project subpath.
+
+`npm run demo` is different: it starts the normal Boushun Node.js server locally with synthetic collection enabled. It remains subject to the same loopback-only server boundary as a normal local installation.
 
 ## Quick start with Docker
 
@@ -48,7 +70,7 @@ npm ci
 BOUSHUN_ALLOWED_CIDRS=192.168.50.0/24 npm start
 ```
 
-Use `npm run demo` for synthetic LLDP/FDB data without inspecting the LAN.
+Use `npm run demo` for a local synthetic server without inspecting the LAN. Use `npm run demo:build` when you need the static read-only artifact used by GitHub Pages.
 
 ## Documentation
 
@@ -61,7 +83,9 @@ Use `npm run demo` for synthetic LLDP/FDB data without inspecting the LAN.
 
 ## Security boundary
 
-Boushun accepts only loopback listen addresses and supports one operator on the probe host. It validates the request host and rejects cross-origin browser requests, but it has no authentication, TLS termination, session management, RBAC, or trusted-proxy handling. Local users and processes that can reach the listener are trusted; remote and multi-user publication is not supported.
+Boushun accepts only loopback listen addresses and supports one operator on the probe host. It validates the request host and rejects cross-origin browser requests, but it has no authentication, TLS termination, session management, RBAC, or trusted-proxy handling. Local users and processes that can reach the listener are trusted; remote and multi-user publication of the Boushun server is not supported.
+
+The GitHub Pages demo does not relax this boundary. It publishes only generated static assets and synthetic projected API fixtures; no collector, local database, scanning endpoint, credential source, or Boushun server is exposed by the demo deployment.
 
 Active discovery is disabled unless its complete target range is covered by `BOUSHUN_ALLOWED_CIDRS`. Configure the smallest practical private range and use only networks you are authorized to scan.
 
@@ -69,6 +93,7 @@ Active discovery is disabled unless its complete target range is covered by `BOU
 
 ```console
 npm run check
+npm run demo:build
 npx playwright install chromium
 npm run test:e2e
 npm run test:container
@@ -76,7 +101,9 @@ npm run screenshots
 npm run verify:screenshots
 ```
 
-`npm run check` covers syntax, unit, component, store, and loopback API tests. Browser acceptance and screenshot generation use only the bundled synthetic fixture. Screenshot verification checks the generated PNG structure, expected width, minimum height, and absence of textual metadata.
+`npm run check` covers syntax, unit, component, store, loopback API tests, and the fixed-clock static-demo build contract. Browser acceptance and screenshot generation use only the bundled synthetic fixture. Screenshot verification checks the generated PNG structure, expected width, minimum height, and absence of textual metadata.
+
+`npm run demo:build` produces the same static artifact shape uploaded by the GitHub Pages workflow. Its automated test verifies synthetic projected state, representative TCP/UDP services, history detail, read-only fixture behavior, and project-subpath-safe asset paths.
 
 `npm run test:container` requires Docker Engine and Compose on Linux. It builds the production image and verifies passive collection, real ICMP and TCP traffic, runtime restrictions, and data persistence across container recreation in a disconnected synthetic network namespace. It ignores local Compose overrides and `.env`, requires the `boushun-ci` project and its data volume to be unused, and removes its test containers and volume afterward. Production host networking is checked in the rendered configuration; real LAN behavior, UDP, multicast, SNMP, Kubernetes, and controller acceptance still require a separately authorized environment.
 
