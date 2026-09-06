@@ -7,12 +7,13 @@
   "scripts": {
     "start": "node src/server.js",
     "demo": "BOUSHUN_DEMO=1 node src/server.js",
+    "demo:build": "node scripts/build-static-demo.js",
     "test": "node --test test/*.test.js",
     "test:e2e": "playwright test",
     "test:container": "node scripts/test-container.js",
     "screenshots": "node scripts/capture-readme.js",
     "verify:screenshots": "node scripts/verify-readme-images.js",
-    "check": "node --check src/server.js && node --check src/collectors/network.js && node --check src/collectors/kubernetes.js && node --check src/collectors/snmp.js && node --check src/collectors/tcp-services.js && node --check src/collectors/udp-services.js && node --check src/domain/current-state.js && node --check src/domain/inventory.js && node --check src/domain/interface-policy.js && node --check src/domain/service-observation.js && node --check src/scan/service-scheduler.js && node --check src/topology/build-topology.js && node --check src/web/viewport.js && node --check src/web/layout.js && node --check src/web/app.js && node --check test/e2e/demo-server.js && node --check test/e2e/ui.spec.js && node --check scripts/capture-readme.js && node --check scripts/verify-readme-images.js && npm test"
+    "check": "node --check src/server.js && node --check src/collectors/network.js && node --check src/collectors/kubernetes.js && node --check src/collectors/snmp.js && node --check src/collectors/tcp-services.js && node --check src/collectors/udp-services.js && node --check src/domain/current-state.js && node --check src/domain/inventory.js && node --check src/domain/interface-policy.js && node --check src/domain/service-observation.js && node --check src/scan/service-scheduler.js && node --check src/topology/build-topology.js && node --check src/web/viewport.js && node --check src/web/layout.js && node --check src/web/app.js && node --check src/web/static-demo-runtime.js && node --check test/e2e/demo-server.js && node --check test/e2e/ui.spec.js && node --check scripts/capture-readme.js && node --check scripts/build-static-demo.js && node --check scripts/verify-readme-images.js && npm test"
   },
   "engines": {
     "node": "^22.0.0 || ^24.0.0 || ^26.0.0"
