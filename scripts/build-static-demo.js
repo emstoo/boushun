@@ -48,11 +48,13 @@ export async function buildStaticDemo(options = {}) {
     await mkdir(outputDirectory, { recursive: true });
 
     await Promise.all([
-      cp(path.join(webDirectory, "styles.css"), path.join(outputDirectory, "styles.css")),
       cp(path.join(webDirectory, "viewport.js"), path.join(outputDirectory, "viewport.js")),
       cp(path.join(webDirectory, "layout.js"), path.join(outputDirectory, "layout.js")),
       cp(path.join(webDirectory, "static-demo-runtime.js"), path.join(outputDirectory, "static-demo-runtime.js")),
     ]);
+
+    const styles = await readFile(path.join(webDirectory, "styles.css"), "utf8");
+    await writeFile(path.join(outputDirectory, "styles.css"), staticStyles(styles), "utf8");
 
     const index = await readFile(path.join(webDirectory, "index.html"), "utf8");
     await writeFile(path.join(outputDirectory, "index.html"), staticIndex(index), "utf8");
@@ -98,6 +100,10 @@ export function staticApp(source) {
   return source
     .replace('from "/viewport.js"', 'from "./viewport.js"')
     .replace('from "/layout.js"', 'from "./layout.js"');
+}
+
+export function staticStyles(source) {
+  return `${source.trimEnd()}\n\n/* Keep the public Pages preview readable at common desktop widths. */\n@media (max-width: 1280px) and (min-width: 761px) {\n  .map-panel .panel-header { align-items: flex-start; flex-direction: column; }\n  .map-tools { width: 100%; flex-wrap: wrap; }\n  .map-tools .search-field { flex: 1 1 240px; width: auto; }\n}\n`;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
