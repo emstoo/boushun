@@ -37,9 +37,11 @@ export async function buildStaticDemo(options = {}) {
     const baseURL = `http://127.0.0.1:${address.port}`;
     const routes = {};
     for (const route of ["/api/state", "/api/history", "/api/database", "/api/automation"]) {
-      const response = await fetch(`${baseURL}${route}`);
-      if (!response.ok) throw new Error(`Unable to capture ${route} (${response.status})`);
-      routes[route] = await response.json();
+      routes[route] = await captureJson(baseURL, route);
+    }
+    for (const item of routes["/api/history"]) {
+      const route = `/api/history/${encodeURIComponent(item.id)}`;
+      routes[route] = await captureJson(baseURL, route);
     }
 
     await rm(outputDirectory, { recursive: true, force: true });
@@ -74,6 +76,12 @@ export async function buildStaticDemo(options = {}) {
     }
     await rm(dataDirectory, { recursive: true, force: true });
   }
+}
+
+async function captureJson(baseURL, route) {
+  const response = await fetch(`${baseURL}${route}`);
+  if (!response.ok) throw new Error(`Unable to capture ${route} (${response.status})`);
+  return response.json();
 }
 
 export function staticIndex(source) {
