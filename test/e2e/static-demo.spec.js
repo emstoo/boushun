@@ -59,7 +59,7 @@ test("[UI-21, UI-22, DEP-08] Pages static demo renders read-only from the projec
   await expect(page.locator("#database-import")).toBeDisabled();
   await expect(page.locator("#database-collect-facts")).toBeDisabled();
 
-  await page.locator('.nav-item[data-section="topology"]').click();
+  await page.locator('.nav-item[data-section="map"]').click();
   await expect(page.getByRole("heading", { name: "Network map", exact: true })).toBeVisible();
 
   const screenshotPath = path.resolve("test-results", "static-demo-pages.png");
