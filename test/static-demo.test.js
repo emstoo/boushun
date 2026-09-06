@@ -29,7 +29,7 @@ test("static demo build captures projected synthetic API responses", async () =>
   try {
     const result = await buildStaticDemo({ outputDirectory, now: () => fixedTime });
     assert.equal(result.generatedAt, fixedTime.toISOString());
-    assert.equal(result.routeCount, 4);
+    assert.equal(result.routeCount, 5);
 
     const [index, app, runtime, fixtureText] = await Promise.all([
       readFile(path.join(outputDirectory, "index.html"), "utf8"),
@@ -51,6 +51,8 @@ test("static demo build captures projected synthetic API responses", async () =>
     assert.ok(fixture.routes["/api/state"].tcpServiceObservation.endpoints.length > 0);
     assert.ok(fixture.routes["/api/state"].udpServiceObservation.endpoints.length > 0);
     assert.equal(fixture.routes["/api/history"].length, 1);
+    const historyId = fixture.routes["/api/history"][0].id;
+    assert.ok(fixture.routes[`/api/history/${encodeURIComponent(historyId)}`].snapshot);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
