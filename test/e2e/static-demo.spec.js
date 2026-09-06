@@ -27,6 +27,10 @@ test("[UI-21, UI-22, DEP-08] Pages static demo renders read-only from the projec
   await expect(page.getByText("Static demo", { exact: true })).toBeVisible();
   await expect(page.locator(".graph-node")).toHaveCount(9);
 
+  const mapHeadingWidth = await page.getByRole("heading", { name: "Network map", exact: true })
+    .evaluate((element) => element.getBoundingClientRect().width);
+  expect(mapHeadingWidth).toBeGreaterThan(90);
+
   await expect(page.locator("#passive-scan")).toBeDisabled();
   await expect(page.locator("#open-scan-dialog")).toBeDisabled();
   await expect(page.locator("#open-service-dialog")).toBeDisabled();
@@ -42,6 +46,8 @@ test("[UI-21, UI-22, DEP-08] Pages static demo renders read-only from the projec
   await expect(page.locator("#drawer-title")).toHaveText("storage.demo.test");
   await expect(page.locator("#drawer-rescan-tcp")).toBeDisabled();
   await expect(page.locator("#drawer-rescan-udp")).toBeDisabled();
+  await page.locator("#drawer-close").click();
+  await expect(page.locator("#detail-drawer")).toBeHidden();
 
   const screens = [
     ["Open ports", "Open ports"],
