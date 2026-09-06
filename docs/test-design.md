@@ -30,6 +30,7 @@ The primary quality goals are:
 - Asynchronous jobs, cancellation, mutual exclusion, schedules, and notifications
 - JSON store, v1/v2 loading, export, import preview, import, reset, and backups
 - HTTP APIs, CSV/JSON/SVG exports, static UI, and security headers
+- Static read-only demo generation and publication from synthetic projected API fixtures without exposing the Boushun server
 - Startup configuration, loopback request-host/origin restrictions, container privileges, and persistence boundaries
 - Accessibility, keyboard operation, and important responsive behavior
 
@@ -38,7 +39,7 @@ The primary quality goals are:
 - IPv6 NDP, distributed probes, embedded UniFi/Omada authentication, and other features outside the current documented boundaries
 - Correctness of IEEE data, Kubernetes itself, or SNMP devices themselves
 - Discovery against the internet or a production LAN without explicit authorization
-- Remote or multi-user publication, including authentication, TLS, and proxy/firewall behavior
+- Remote or multi-user publication of the Boushun server, including authentication, TLS, and proxy/firewall behavior; the generated static read-only demo is covered separately
 - Pixel-perfect CSS matching; inaccessible controls, missing information, overlap, and missing focus behavior remain in scope
 
 ## 3. Priorities and Test Levels
@@ -54,8 +55,8 @@ The primary quality goals are:
 | Unit | Parsing, normalization, composition, diffs, layout, and input boundaries | None |
 | Component | Collectors, store, jobs, and scheduler through replaceable boundaries | Temporary files and loopback only |
 | API integration | HTTP contracts with a temporary store and fake collectors | Loopback only |
-| UI/E2E | Primary browser-based user workflows | Fake APIs or an isolated LAN |
-| Deployment/acceptance | Privileges, persistence, and real collection on Linux or in a container | Explicitly authorized isolated ranges only |
+| UI/E2E | Primary browser-based user workflows | Fake APIs, static fixtures, or an isolated LAN |
+| Deployment/acceptance | Privileges, persistence, static publication boundaries, and real collection on Linux or in a container | Static artifacts or explicitly authorized isolated ranges only |
 
 P0 behavior must be covered beyond unit level at the applicable API integration or deployment boundary. Time, UUIDs, DNS, sockets, the filesystem, Kubernetes APIs, SNMP sessions, and OS commands should be controllable so routine automation is deterministic.
 
@@ -69,6 +70,7 @@ P0 behavior must be covered beyond unit level at the applicable API integration 
 - Services: TCP open/closed/timeout, UDP open/closed/open-or-filtered, Kubernetes ClusterIP/LoadBalancer/NodePort, and controller services.
 - Topology: LLDP, FDB, controller links, a device without link evidence, a VIP, and a default route.
 - Database: empty, v1, v2, maximum snapshot count, malformed JSON, structurally invalid state, and state containing excess audit/notification entries.
+- Static demo: a fixed-clock synthetic projected state with representative topology, TCP/UDP services, history, automation/database summaries, and no live credentials or LAN observations.
 
 Do not use real credentials in test SNMP configuration or kubeconfig files. Secret non-disclosure tests may place a harmless identifying marker only in a protected fixture. The oracle is that the marker never appears in an API body, snapshot, evidence record, warning, error, or log.
 
@@ -287,6 +289,8 @@ Do not use real credentials in test SNMP configuration or kubeconfig files. Secr
 | UI-18 | P2 | Use narrow viewports, touch, and high zoom | Prevent control overlap or content loss, keep interactive controls distinguishable from static content, and provide pointer targets at least 40 CSS pixels high |
 | UI-19 | P1 | API times out, returns 4xx/5xx, or polling stops | Show a safe toast/banner and restore buttons/loading to a usable state |
 | UI-20 | P1 | Export JSON, SVG, and CSV | Preserve the selected/current meaning and never execute user-controlled content as script |
+| UI-21 | P1 | Build and load the static demo at a site root and below a subpath | Assets resolve through relative URLs, the synthetic projected state/history/service data render without a live Boushun backend, and every sidebar view remains usable |
+| UI-22 | P0 | Attempt scan, identity, schedule, notification, or database mutations in the static demo | Mutating controls remain unavailable and non-GET API requests are rejected locally, while search, view/filter changes, pan/zoom, node inspection, layout dragging, and client-side exports remain usable |
 
 ### 5.12 Deployment and operational boundaries
 
@@ -299,6 +303,7 @@ Do not use real credentials in test SNMP configuration or kubeconfig files. Secr
 | DEP-05 | P0 | Mount SNMP/kubeconfig/controller/lease inputs | Read only explicitly mounted files and include no credential in the image or database export |
 | DEP-06 | P1 | Send SIGINT/SIGTERM | Stop accepting new work, stop the scheduler, and exit within a bounded interval |
 | DEP-07 | P1 | OUI update succeeds, HTTP fails, or download is empty | Replace the 0600 destination only on success and preserve an existing file on failure |
+| DEP-08 | P0 | Generate and publish `dist/demo/` | Build from synthetic projected API responses only; emit static assets/fixtures with no live collector or server dependency, preserve subpath hosting, and never require relaxing loopback/Host/Origin protections in the production server |
 
 ## 6. Cross-Cutting Invariants
 
@@ -314,6 +319,7 @@ Every scenario should also verify these invariants where applicable:
 8. A successful mutation has matching persisted state, audit, and API response; a failed mutation adds none of them.
 9. User-controlled text is never interpreted as HTML and is mitigated as spreadsheet formula input in CSV.
 10. Credential sources are input-only and never enter the public data model.
+11. Publishing the static demo never relaxes the production server's loopback, Host, or Origin boundaries; the published artifact remains synthetic and read-only.
 
 ## 7. Non-Functional and Fault-Injection Coverage
 
@@ -330,15 +336,15 @@ Every scenario should also verify these invariants where applicable:
 - External sources: timeout, partial response, malformed JSON/packet, permission denial, and DNS failure.
 - Network: refused, unreachable, timeout, late response, and abort/response races.
 - Process: shutdown during a scan and request contention during database mutation.
-- Browser: delayed API responses, polling failure, reload, download failure, and repeated clicks.
+- Browser: delayed API responses, polling failure, reload, download failure, repeated clicks, and missing or malformed static-demo fixtures.
 
-After each injected failure, verify that the process remains responsive, `state.json` is parseable, prior snapshots remain, active flags are released, sockets/timers/sessions terminate, and no secret is exposed.
+After each injected failure, verify that the process remains responsive, `state.json` is parseable, prior snapshots remain, active flags are released, sockets/timers/sessions terminate, and no secret is exposed. Static-demo fixture failures must fail closed without falling through to a live Boushun API.
 
 ## 8. Execution Order and Release Gates
 
 The public CI gate runs three independent jobs:
 
-1. `npm run check` on every supported Node.js release line for syntax, unit, component, store, and loopback API tests.
+1. `npm run check` on every supported Node.js release line for syntax, unit, component, store, and loopback API tests. This includes a fixed-clock static-demo build test that captures projected synthetic API responses, verifies representative TCP/UDP and history data, checks subpath-safe assets, and asserts the read-only fixture contract.
 2. `npm run test:e2e` in Chromium against a fixed-clock synthetic snapshot, followed by `npm run screenshots` and `npm run verify:screenshots` to validate generated PNG dimensions and reject textual metadata without requiring a real LAN. Exact image bytes are not compared across operating systems because browser rendering and fonts vary by runner.
 3. `npm run test:container` builds the production image and validates the production Compose host-network configuration. Runtime checks share a disconnected synthetic fixture's network namespace: passive collection must discover its dummy interface, ICMP must succeed, and a TCP scan must find its service. The application retains its non-root user, read-only root filesystem, `NET_RAW`-only capability boundary, health check, persistent volume, and restricted temporary filesystem. Writes to the root filesystem and execution from `/tmp` must actually fail. Recreating the application container must preserve exported state and layout. Only the isolated fixture receives `NET_ADMIN` to create the dummy interface; neither container can reach the host LAN. The script ignores local overrides and `.env`, refuses an existing `boushun-ci` project or data volume, and removes its synthetic containers and volume on completion or test failure.
 
@@ -356,4 +362,5 @@ Progression requires all P0 tests to pass. A P1 failure must be explicitly accep
 - Current state, history detail, and arbitrary comparison use the same as-of semantics.
 - UDP uncertainty, Physical unplaced devices, ClusterIP collapse, and identity conflicts retain their meaning in both UI and API.
 - Credential markers never appear in APIs, exports, evidence, warnings, errors, logs, or UI.
+- The static demo is reproducibly generated from synthetic projected data, remains read-only without a live backend, and can be hosted from a subpath without weakening production server boundaries.
 - Test results record the execution environment, fixture provenance, authorized network scope, and remaining known limitations.
