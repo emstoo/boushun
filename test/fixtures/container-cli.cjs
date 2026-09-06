@@ -2,9 +2,12 @@
 // A synthetic Docker CLI for lifecycle tests. Never invokes Docker or the LAN.
 const { appendFileSync } = require("node:fs");
 const { spawn } = require("node:child_process");
+const path = require("node:path");
 
 const scenario = process.env.BOUSHUN_TEST_SCENARIO;
-const record = (event) => appendFileSync(process.env.BOUSHUN_TEST_EVENTS, `${JSON.stringify({ event, pid: process.pid })}\n`);
+// The harness copies this CLI beside its event file in a private temporary directory.
+const eventsPath = path.join(__dirname, "events.jsonl");
+const record = (event) => appendFileSync(eventsPath, `${JSON.stringify({ event, pid: process.pid })}\n`);
 const args = process.argv.slice(2);
 const hold = (name) => {
   const timer = setInterval(() => {}, 1_000);

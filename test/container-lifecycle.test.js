@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
-async function start(t, scenario = "normal") {
+async function start(t, scenario = "normal", extraEnv = {}) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "boushun-container-lifecycle-"));
   const executable = path.join(directory, "docker");
   const eventsPath = path.join(directory, "events.jsonl");
@@ -17,7 +17,7 @@ async function start(t, scenario = "normal") {
   await writeFile(eventsPath, "", { flag: "wx", mode: 0o600 });
   const child = spawn(process.execPath, ["scripts/test-container.js"], {
     cwd: root, detached: true,
-    env: { ...process.env, PATH: `${directory}:${process.env.PATH}`, BOUSHUN_TEST_SCENARIO: scenario, BOUSHUN_TEST_EVENTS: eventsPath },
+    env: { ...process.env, ...extraEnv, PATH: `${directory}:${process.env.PATH}`, BOUSHUN_TEST_SCENARIO: scenario },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";
@@ -89,6 +89,12 @@ test("[DEP-06] existing project refusal never invokes cleanup", { timeout: 15_00
   assert.deepEqual(await run.closed, { code: 1, signal: null });
   assert.equal((await run.events()).some((item) => item.event === "cleanup-start"), false);
   assert.match(run.output(), /Refusing to use an existing boushun-ci project/);
+});
+
+test("[DEP-06] environment cannot redirect the fixture event log", { timeout: 15_000 }, async (t) => {
+  const run = await start(t, "existing", { BOUSHUN_TEST_EVENTS: "/dev/null" });
+  assert.deepEqual(await run.closed, { code: 1, signal: null });
+  assert.deepEqual((await run.events()).map((item) => item.event), ["containers-check"]);
 });
 
 test("[DEP-06] cleanup failures remain visible after interruption", { timeout: 15_000 }, async (t) => {
