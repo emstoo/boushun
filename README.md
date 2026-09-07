@@ -19,7 +19,7 @@ See the [feature reference](docs/features.md) for the complete capability list.
 
 [Open the static read-only demo](https://emstoo.github.io/boushun/).
 
-The GitHub Pages demo is generated entirely from bundled synthetic observations. It does not connect to, inspect, or scan a real LAN, and actions that would change Boushun state are disabled. Topology navigation, search, filters, node inspection, pan/zoom, and client-side exports remain available for exploring the interface.
+The GitHub Pages demo is generated entirely from bundled synthetic observations. It does not connect to, inspect, or scan a real LAN, and actions that would change Boushun state are disabled. Topology navigation, search, filters, node inspection, pan/zoom, and JSON/SVG/CSV exports remain available for exploring the interface.
 
 The public demo is a generated static artifact, not a remotely exposed Boushun server. Live LAN collection still requires running Boushun locally as described below.
 
@@ -39,9 +39,11 @@ Generate the same public-demo artifact locally with:
 npm run demo:build
 ```
 
-The command writes a static site to `dist/demo/`. During the build, Boushun starts only on loopback with a temporary store, projects the bundled synthetic collector through the normal server APIs, captures the resulting state/history/database/automation responses, and then shuts the server down. The generated site serves those captured responses in the browser and rejects mutating API calls.
+The command writes a static site to `dist/demo/`. During the build, Boushun starts only on loopback with a temporary store, projects the bundled synthetic collector through the normal server APIs, captures the resulting state/history/database/automation responses and the normal JSON/inventory-CSV/ports-CSV exports, and then shuts the server down. The generated site serves those captured responses and export files without a live backend and rejects mutating API calls.
 
 On pushes to `main`, the Pages workflow builds `dist/demo/` and deploys that artifact to `https://emstoo.github.io/boushun/`. Generated assets use relative paths so the site works below the GitHub Pages project subpath.
+
+Before the first deployment, enable GitHub Pages once in the repository settings: **Settings → Pages → Build and deployment → Source → GitHub Actions**. The workflow uses the repository `GITHUB_TOKEN` for deployment; GitHub's `actions/configure-pages` action cannot enable Pages itself with that token, so this one-time repository setting is required before the first successful publish.
 
 `npm run demo` is different: it starts the normal Boushun Node.js server locally with synthetic collection enabled. It remains subject to the same loopback-only server boundary as a normal local installation.
 
@@ -103,7 +105,9 @@ npm run verify:screenshots
 
 `npm run check` covers syntax, unit, component, store, loopback API tests, and the fixed-clock static-demo build contract. Browser acceptance and screenshot generation use only the bundled synthetic fixture. Screenshot verification checks the generated PNG structure, expected width, minimum height, and absence of textual metadata.
 
-`npm run demo:build` produces the same static artifact shape uploaded by the GitHub Pages workflow. Its automated test verifies synthetic projected state, representative TCP/UDP services, history detail, read-only fixture behavior, and project-subpath-safe asset paths.
+`npm run demo:build` produces the same static artifact shape uploaded by the GitHub Pages workflow. Its automated test verifies synthetic projected state, representative TCP/UDP services, history detail, generated JSON/CSV export files, read-only fixture behavior, and project-subpath-safe asset paths.
+
+`npm run test:e2e` also serves the generated static artifact from the `/boushun/` project subpath in Chromium. The Pages-specific scenario verifies primary navigation, disabled scan/database/interface-policy mutations, safe topology interactions, JSON/inventory/ports downloads, no console/page errors, and that no request reaches a live `/api/*` backend. CI retains a full-page Pages-preview screenshot as an artifact.
 
 `npm run test:container` requires Docker Engine and Compose on Linux. It builds the production image and verifies passive collection, real ICMP and TCP traffic, runtime restrictions, and data persistence across container recreation in a disconnected synthetic network namespace. It ignores local Compose overrides and `.env`, requires the `boushun-ci` project and its data volume to be unused, and removes its test containers and volume afterward. Production host networking is checked in the rendered configuration; real LAN behavior, UDP, multicast, SNMP, Kubernetes, and controller acceptance still require a separately authorized environment.
 
