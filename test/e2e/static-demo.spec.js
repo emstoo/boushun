@@ -42,7 +42,7 @@ test("[UI-21, UI-22, DEP-08] Pages static demo renders read-only from the projec
   expect(jsonDownload.suggestedFilename()).toBe("boushun-demo.json");
   const jsonDownloadPath = await jsonDownload.path();
   const exported = JSON.parse(await readFile(jsonDownloadPath, "utf8"));
-  expect(exported.snapshot.hostname).toBe("boushun-probe.demo.test");
+  expect(exported.snapshot.hostname).toBe("demo-probe");
 
   await page.getByRole("button", { name: "Zoom in" }).click();
   await expect(page.locator("#zoom-level")).not.toHaveText("100%");
