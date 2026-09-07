@@ -32,6 +32,7 @@ test("static demo also loads from the site root", async ({ page }) => {
 
 for (const [name, response, message] of [
   ["missing", { status: 404, body: "Missing" }, /Unable to load static demo fixture/],
+  ["temporarily unavailable", { status: 503, body: "Unavailable" }, /Unable to load static demo fixture/],
   ["malformed", { status: 200, json: { readOnly: false, routes: {} } }, /Invalid static demo fixture/],
 ]) {
   test(`static demo keeps mutations disabled when its fixture is ${name}`, async ({ page }) => {
@@ -39,16 +40,45 @@ for (const [name, response, message] of [
     page.on("request", (request) => {
       if (new URL(request.url()).pathname.includes("/api/")) apiRequests.push(request.url());
     });
+    await page.clock.install();
     await page.route("**/demo-fixture.json", (route) => route.fulfill(response));
     await page.goto(demo.baseURL);
-    await expect(page.locator("#toast")).toHaveText(message);
+    await expect(page.locator("#load-error-message")).toHaveText(message);
+    await page.clock.fastForward("00:10");
+    await expect(page.locator("#load-error")).toBeVisible();
     await expect(page.locator("#loading-overlay")).toBeHidden();
     for (const id of ["passive-scan", "open-scan-dialog", "device-name", "schedule-protocol", "database-reset"]) {
       await expect(page.locator(`#${id}`)).toBeDisabled();
     }
     expect(apiRequests).toEqual([]);
+    await page.unroute("**/demo-fixture.json");
+    await page.getByRole("button", { name: "Reload demo", exact: true }).click();
+    await expect(page.locator(".graph-node")).toHaveCount(9);
+    await expect(page.locator("#load-error")).toBeHidden();
+    await expect(page.locator("#passive-scan")).toBeDisabled();
+    expect(apiRequests).toEqual([]);
   });
 }
+
+test("static demo exits loading after a stalled fixture and recovers on reload", async ({ page }) => {
+  await page.clock.install();
+  const requested = page.waitForRequest("**/demo-fixture.json");
+  await page.route("**/demo-fixture.json", () => {});
+  await page.goto(demo.baseURL, { waitUntil: "domcontentloaded" });
+  await requested;
+  await expect(page.locator("#loading-overlay")).toBeVisible();
+  await page.clock.fastForward("00:16");
+  await expect(page.locator("#loading-overlay")).toBeHidden();
+  await expect(page.locator("#load-error-message")).toContainText("timed out");
+  await expect(page.locator("#passive-scan")).toBeDisabled();
+  await page.clock.fastForward("00:10");
+  await expect(page.locator("#load-error")).toBeVisible();
+  await page.unroute("**/demo-fixture.json");
+  await page.getByRole("button", { name: "Reload demo", exact: true }).click();
+  await expect(page.locator(".graph-node")).toHaveCount(9);
+  await expect(page.locator("#load-error")).toBeHidden();
+  expect(demo.apiRequests).toEqual([]);
+});
 
 test("static demo keeps dynamically rendered schedules and interface policies disabled", async ({ page }) => {
   await page.route("**/demo-fixture.json", async (route) => {

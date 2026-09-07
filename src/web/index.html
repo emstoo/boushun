@@ -88,6 +88,11 @@
 
         <div class="warning-banner hidden" id="warning-banner" role="status"></div>
 
+        <div class="warning-banner load-error hidden" id="load-error" role="alert">
+          <div><strong>Static demo could not load</strong><p id="load-error-message"></p><p>Reload the page to try again. This resets any session-local map layout.</p></div>
+          <button class="button secondary" id="reload-demo" type="button">Reload demo</button>
+        </div>
+
         <section class="scan-status hidden" id="scan-status" aria-label="Active scan status">
           <span class="scan-status-pulse" aria-hidden="true"></span>
           <div class="scan-status-content">

@@ -38,17 +38,27 @@ export function createLiveRuntime({ fetch: fetcher = globalThis.fetch } = {}) {
   });
 }
 
-export function createStaticRuntime({ baseURL, fetch: fetcher = globalThis.fetch }) {
+export function createStaticRuntime({ baseURL, fetch: fetcher = globalThis.fetch, timeoutMs = 15_000 }) {
   const fixtureURL = new URL("./demo-fixture.json", baseURL);
   let fixturePromise;
   async function loadFixture() {
-    const response = await fetcher(fixtureURL);
-    if (!response.ok) throw new Error(`Unable to load static demo fixture (${response.status})`);
-    const fixture = await response.json();
-    if (fixture?.readOnly !== true || !fixture.routes || typeof fixture.routes !== "object" || Array.isArray(fixture.routes)) {
-      throw new Error("Invalid static demo fixture");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort(new Error("Static demo data timed out. Reload the page to try again."));
+    }, timeoutMs);
+    try {
+      const response = await fetcher(fixtureURL, { signal: controller.signal });
+      if (!response.ok) throw new Error(`Unable to load static demo fixture (${response.status})`);
+      const fixture = await response.json();
+      if (fixture?.readOnly !== true || !fixture.routes || typeof fixture.routes !== "object" || Array.isArray(fixture.routes)) {
+        throw new Error("Invalid static demo fixture");
+      }
+      return fixture;
+    } catch (error) {
+      throw controller.signal.aborted ? controller.signal.reason : error;
+    } finally {
+      clearTimeout(timeout);
     }
-    return fixture;
   }
 
   return Object.freeze({
@@ -57,7 +67,8 @@ export function createStaticRuntime({ baseURL, fetch: fetcher = globalThis.fetch
     async request(route, options = {}) {
       if (String(options.method ?? "GET").toUpperCase() !== "GET") throw new Error(readOnlyMessage);
       if (typeof route !== "string" || !route.startsWith("/api/")) throw new Error("Demo endpoint not available");
-      // Cache only the fixture; each caller receives an independent API response.
+      // Share one bounded load, including failures until an explicit page reload.
+      // Each caller receives an independent API response.
       const fixture = await (fixturePromise ??= loadFixture());
       if (!Object.hasOwn(fixture.routes, route)) throw new Error("Demo endpoint not available");
       return structuredClone(fixture.routes[route]);

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { createLiveRuntime, createStaticRuntime, EXPORTS } from "../src/web/api-client.js";
 import { applyCapabilities, setControlDisabled } from "../src/web/capabilities.js";
 
@@ -51,6 +52,39 @@ test("static runtime rejects all API writes but supports session-local layout wi
   }
   assert.deepEqual(await runtime.saveLayout({ node: { x: 1, y: 2 } }), { saved: false, demo: true });
   assert.throws(() => runtime.exportTarget("database"), /read-only/);
+});
+
+for (const phase of ["response", "body"]) {
+  test(`static fixture timeout aborts a stalled ${phase} for all concurrent readers`, async () => {
+    const calls = [];
+    const runtime = createStaticRuntime({ baseURL: "https://example.test/", timeoutMs: 20, fetch: async (url, { signal }) => {
+      calls.push({ url: String(url), signal });
+      const stalled = () => new Promise((resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+      return phase === "response" ? stalled() : { ok: true, json: stalled };
+    } });
+    await Promise.all(["/api/state", "/api/history", "/api/database"].map((route) =>
+      assert.rejects(runtime.request(route), /Static demo data timed out/)));
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].signal.aborted, true);
+    await assert.rejects(runtime.request("/api/state"), /Static demo data timed out/);
+    assert.equal(calls.length, 1, "No unbounded automatic retries after failure");
+  });
+}
+
+test("static fixture clears its deadline after success or HTTP failure", async () => {
+  for (const status of [200, 503]) {
+    let signal;
+    const runtime = createStaticRuntime({ baseURL: "https://example.test/", timeoutMs: 20, fetch: async (url, options) => {
+      signal = options.signal;
+      return Response.json({ readOnly: true, routes: { "/api/state": {} } }, { status });
+    } });
+    if (status === 200) await runtime.request("/api/state");
+    else await assert.rejects(runtime.request("/api/state"), /503/);
+    await delay(40);
+    assert.equal(signal.aborted, false);
+  }
 });
 
 test("static runtime rejects unknown and foreign endpoints without a live API fallback", async () => {

@@ -43,6 +43,8 @@ The command writes a static site to `dist/demo/`. During the build, Boushun star
 
 The local server and static site share the same HTML, styles, and application modules. The build selects a static `runtime.js` entry point instead of the live API runtime; it does not rewrite application source or replace browser APIs. Controls declare the capabilities they require, and renderers preserve those restrictions. The static runtime reads only the captured fixture, never falls back to a live API, and keeps map layout changes within the current page session. Export targets share one definition with the build.
 
+Static fixture loading has a 15-second timeout covering the request and response body. On a timeout, HTTP error, or invalid fixture, the demo keeps mutations disabled and shows a persistent error with a **Reload demo** button. Reloading starts a fresh load and resets the session-local map layout; there are no automatic retries.
+
 On pushes to `main`, the Pages workflow builds `dist/demo/` and deploys that artifact to `https://emstoo.github.io/boushun/`. Generated assets use relative paths so the site works below the GitHub Pages project subpath.
 
 Before the first deployment, enable GitHub Pages once in the repository settings: **Settings → Pages → Build and deployment → Source → GitHub Actions**. The workflow uses the repository `GITHUB_TOKEN` for deployment; GitHub's `actions/configure-pages` action cannot enable Pages itself with that token, so this one-time repository setting is required before the first successful publish.

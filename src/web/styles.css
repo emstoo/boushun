@@ -120,6 +120,9 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .demo-banner strong { color: var(--mint); }
 .demo-banner code { color: var(--mint-bright); }
 .warning-banner { color: #fee7bd; border: 1px solid rgba(245,198,107,.25); background: rgba(245,198,107,.08); }
+.load-error { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.load-error > div { flex: 1 1 260px; overflow-wrap: anywhere; }
+.load-error p { margin: 6px 0 0; }
 
 .scan-status { position: sticky; top: 12px; z-index: 9; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 15px; margin-top: 14px; border: 1px solid rgba(110,231,183,.3); border-radius: 14px; padding: 14px 15px; background: rgba(9,25,20,.94); box-shadow: 0 18px 55px rgba(0,0,0,.34); backdrop-filter: blur(18px); }
 .scan-status-pulse { width: 11px; height: 11px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 5px rgba(110,231,183,.1), 0 0 18px rgba(110,231,183,.7); animation: scan-status-pulse 1.5s ease-in-out infinite; }

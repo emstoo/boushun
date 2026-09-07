@@ -42,6 +42,7 @@ const state = {
 
 const dom = Object.fromEntries(
   [
+    "load-error", "load-error-message", "reload-demo",
     "probe-host", "probe-mode", "passive-scan", "last-seen", "export-json", "export-svg",
     "open-scan-dialog", "open-service-dialog", "open-udp-dialog", "demo-banner", "warning-banner", "stat-devices", "stat-device-diff",
     "stat-networks", "stat-links", "stat-weak", "graph-search", "map-view", "layer-filter", "confidence-filter", "reset-layout",
@@ -81,6 +82,7 @@ function configureRuntime() {
 }
 
 async function loadState() {
+  dom["load-error"].classList.add("hidden");
   setLoading(true, "Loading observations", "Reading the local evidence store.");
   try {
     const [payload, history, database] = await Promise.all([api("/api/state"), api("/api/history"), api("/api/database")]);
@@ -93,7 +95,13 @@ async function loadState() {
       await resumeScan(payload.activeScan);
     }
   } catch (error) {
-    showToast(error.message, true);
+    if (runtime.kind === "static") {
+      dom["load-error-message"].textContent = error.message;
+      dom["load-error"].classList.remove("hidden");
+      dom["last-seen"].textContent = "Static demo unavailable.";
+    } else {
+      showToast(error.message, true);
+    }
   } finally {
     if (!state.scanning) setLoading(false);
   }
@@ -1234,6 +1242,7 @@ function updateUdpServiceSummary() {
 }
 
 function bindEvents() {
+  dom["reload-demo"].addEventListener("click", () => window.location.reload());
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.addEventListener("click", () => switchSection(button.dataset.section));
   });
