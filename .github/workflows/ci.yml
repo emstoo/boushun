@@ -59,12 +59,30 @@ jobs:
         run: npm ci
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+      - name: Validate committed README screenshots
+        run: npm run verify:screenshots
       - name: Run browser acceptance
+        id: browser-tests
         run: npm run test:e2e
+      - name: Upload Pages demo screenshot
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: static-demo-pages-screenshot
+          path: test-results/static-demo-pages.png
+          if-no-files-found: error
+          retention-days: 7
       - name: Verify synthetic screenshot generation
         run: npm run screenshots
       - name: Validate generated screenshot artifacts
         run: npm run verify:screenshots
+      - name: Upload browser failure diagnostics
+        if: ${{ failure() && steps.browser-tests.outcome == 'failure' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: browser-failure-diagnostics
+          path: test-results/
+          if-no-files-found: warn
+          retention-days: 7
 
   container:
     name: Container acceptance

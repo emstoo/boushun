@@ -3,8 +3,14 @@ import {
   panViewport,
   viewportToWorld,
   zoomViewportAt,
-} from "/viewport.js";
-import { computeTopologyLayout } from "/layout.js";
+} from "./viewport.js";
+import { computeTopologyLayout } from "./layout.js";
+
+import { runtime } from "./runtime.js";
+import { applyCapabilities, setControlDisabled } from "./capabilities.js";
+
+const api = runtime.request;
+const disableControl = (control, disabled) => setControlDisabled(control, disabled, runtime.capabilities);
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const NODE_WIDTH = 216;
@@ -36,6 +42,7 @@ const state = {
 
 const dom = Object.fromEntries(
   [
+    "load-error", "load-error-message", "reload-demo",
     "probe-host", "probe-mode", "passive-scan", "last-seen", "export-json", "export-svg",
     "open-scan-dialog", "open-service-dialog", "open-udp-dialog", "demo-banner", "warning-banner", "stat-devices", "stat-device-diff",
     "stat-networks", "stat-links", "stat-weak", "graph-search", "map-view", "layer-filter", "confidence-filter", "reset-layout",
@@ -61,11 +68,21 @@ const dom = Object.fromEntries(
   ].map((id) => [id, document.getElementById(id)]),
 );
 
+configureRuntime();
 bindEvents();
 await loadState();
-window.setInterval(() => void refreshAutomation(), 30_000);
+if (runtime.kind === "live") window.setInterval(() => void refreshAutomation(), 30_000);
+
+function configureRuntime() {
+  applyCapabilities(document, runtime.capabilities);
+  if (runtime.kind !== "static") return;
+  const banner = dom["demo-banner"];
+  banner.querySelector("strong").textContent = "Static demo";
+  banner.querySelector("span").textContent = "Synthetic read-only data. Scanning and data changes are disabled.";
+}
 
 async function loadState() {
+  dom["load-error"].classList.add("hidden");
   setLoading(true, "Loading observations", "Reading the local evidence store.");
   try {
     const [payload, history, database] = await Promise.all([api("/api/state"), api("/api/history"), api("/api/database")]);
@@ -78,7 +95,13 @@ async function loadState() {
       await resumeScan(payload.activeScan);
     }
   } catch (error) {
-    showToast(error.message, true);
+    if (runtime.kind === "static") {
+      dom["load-error-message"].textContent = error.message;
+      dom["load-error"].classList.remove("hidden");
+      dom["last-seen"].textContent = "Static demo unavailable.";
+    } else {
+      showToast(error.message, true);
+    }
   } finally {
     if (!state.scanning) setLoading(false);
   }
@@ -147,7 +170,7 @@ function renderDatabase(summary) {
   dom["database-stat-layout"].textContent = summary.layoutPositions;
   dom["database-stat-automation"].textContent = automationItems;
   dom["database-empty-status"].classList.toggle("hidden", summary.snapshots !== 0 || state.scanning);
-  dom["database-collect-facts"].disabled = state.scanning;
+  disableControl(dom["database-collect-facts"], state.scanning);
 }
 
 function databasePreviewText(summary, fileName) {
@@ -207,7 +230,7 @@ function renderGraph() {
   dom["graph-empty"].classList.toggle("hidden", nodes.length > 0);
   const physicalSetupNeeded = state.view === "physical" && nodes.length === 0;
   dom["graph-empty-actions"].classList.toggle("hidden", !physicalSetupNeeded);
-  dom["graph-empty-deep"].disabled = state.scanning || !(state.payload?.snapshot?.scanCandidates?.length);
+  disableControl(dom["graph-empty-deep"], state.scanning || !(state.payload?.snapshot?.scanCandidates?.length));
   const emptyCopy = state.view === "physical"
     ? ["Physical topology needs a link source", "No LLDP, switch forwarding-table, or controller link evidence is available. Configure SNMPv3 or a controller export, then run a Deep scan. Devices remain listed below without invented links."]
     : state.view === "services"
@@ -364,7 +387,7 @@ async function dragEnd() {
   state.drag = null;
   if (state.suppressClick) setTimeout(() => { state.suppressClick = false; }, 0);
   try {
-    await api("/api/layout", { method: "PUT", body: { positions: state.positions } });
+    await runtime.saveLayout(state.positions);
   } catch (error) {
     showToast(`Layout was not saved: ${error.message}`, true);
   }
@@ -751,9 +774,10 @@ function renderAutomation(schedules, notifications) {
           : "Not run yet"),
       );
       const actions = element("div", "schedule-actions");
+      actions.dataset.capability = "automation";
       const run = textElement("button", "Run now", "button secondary schedule-run");
       run.type = "button";
-      run.disabled = state.scanning;
+      disableControl(run, state.scanning);
       run.addEventListener("click", () => runScheduleNow(schedule.id));
       const toggle = textElement("button", schedule.enabled ? "Disable" : "Enable", "button tertiary");
       toggle.type = "button";
@@ -762,6 +786,7 @@ function renderAutomation(schedules, notifications) {
       remove.type = "button";
       remove.addEventListener("click", () => deleteSchedule(schedule));
       actions.append(run, toggle, remove);
+      applyCapabilities(actions, runtime.capabilities);
       row.append(details, textElement("span", schedule.enabled ? "Enabled" : "Disabled", `schedule-status ${schedule.enabled ? "enabled" : "disabled"}`), actions);
       return row;
     })
@@ -779,7 +804,7 @@ function populateScheduleForm() {
   }));
   if (cidrs.includes(selectedCidr)) dom["schedule-cidr"].value = selectedCidr;
   populateSchedulePresets();
-  dom["schedule-form"].querySelector('button[type="submit"]').disabled = cidrs.length === 0;
+  disableControl(dom["schedule-form"].querySelector('button[type="submit"]'), cidrs.length === 0);
 }
 
 function populateSchedulePresets() {
@@ -915,7 +940,8 @@ function renderMapCompanion(topology) {
     const actions = element("div", "editor-actions");
     const deep = textElement("button", "Run Deep scan", "button primary");
     deep.type = "button";
-    deep.disabled = state.scanning || !(state.payload?.snapshot?.scanCandidates?.length);
+    deep.dataset.capability = "collect";
+    disableControl(deep, state.scanning || !(state.payload?.snapshot?.scanCandidates?.length));
     deep.addEventListener("click", openDeepScanDialog);
     const sources = textElement("button", "Review sources", "button secondary");
     sources.type = "button";
@@ -990,6 +1016,8 @@ function renderSources(sources, interfaces) {
       const cell = document.createElement("td");
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
+      checkbox.dataset.capability = "editInterfaces";
+      disableControl(checkbox, false);
       checkbox.checked = item.policy[key];
       checkbox.setAttribute("aria-label", `${capitalize(key)} ${item.name}`);
       checkbox.addEventListener("change", () => saveInterfacePolicy(item.name, key, checkbox.checked));
@@ -1026,7 +1054,7 @@ function renderHistory() {
   dom["history-to"].replaceChildren(...options.map((option) => option.cloneNode(true)));
   dom["history-from"].value = snapshots.some((item) => item.id === currentFrom) ? currentFrom : snapshots.at(-2)?.id ?? snapshots.at(-1)?.id ?? "";
   dom["history-to"].value = snapshots.some((item) => item.id === currentTo) ? currentTo : snapshots.at(-1)?.id ?? "";
-  dom["compare-history"].disabled = snapshots.length < 2;
+  disableControl(dom["compare-history"], snapshots.length < 2);
   dom["history-timeline"].replaceChildren(...[...snapshots].reverse().map((snapshot, index) => {
     const item = document.createElement("li");
     item.append(
@@ -1116,7 +1144,7 @@ function populateScanCIDRs(cidrs) {
       return option;
     }),
   );
-  dom["open-scan-dialog"].disabled = cidrs.length === 0;
+  disableControl(dom["open-scan-dialog"], cidrs.length === 0);
   dom["service-cidr"].replaceChildren(
     ...cidrs.map((cidr) => {
       const option = document.createElement("option");
@@ -1125,7 +1153,7 @@ function populateScanCIDRs(cidrs) {
       return option;
     }),
   );
-  dom["open-service-dialog"].disabled = cidrs.length === 0;
+  disableControl(dom["open-service-dialog"], cidrs.length === 0);
   dom["udp-cidr"].replaceChildren(
     ...cidrs.map((cidr) => {
       const option = document.createElement("option");
@@ -1134,7 +1162,7 @@ function populateScanCIDRs(cidrs) {
       return option;
     }),
   );
-  dom["open-udp-dialog"].disabled = cidrs.length === 0;
+  disableControl(dom["open-udp-dialog"], cidrs.length === 0);
   updateTcpServiceSummary();
   updateUdpServiceSummary();
 }
@@ -1167,11 +1195,11 @@ function updateTcpServiceSummary() {
     const attempts = targets * ports.length;
     dom["service-scan-summary"].textContent = `${targets} IP addresses × ${ports.length} TCP ports = ${attempts.toLocaleString("en-US")} connection attempts. Ports: ${ports.join(", ")}`;
     dom["service-scan-summary"].classList.remove("invalid");
-    dom["confirm-service-scan"].disabled = attempts === 0 || attempts > 16_384;
+    disableControl(dom["confirm-service-scan"], attempts === 0 || attempts > 16_384);
   } catch (error) {
     dom["service-scan-summary"].textContent = error.message;
     dom["service-scan-summary"].classList.add("invalid");
-    dom["confirm-service-scan"].disabled = true;
+    disableControl(dom["confirm-service-scan"], true);
   }
 }
 
@@ -1205,15 +1233,16 @@ function updateUdpServiceSummary() {
     const attempts = targets * ports.length;
     dom["udp-scan-summary"].textContent = `${targets} IP addresses × ${ports.length} UDP ports = ${attempts.toLocaleString("en-US")} endpoint checks, with at most one retry after a timeout. Ports: ${ports.join(", ")}`;
     dom["udp-scan-summary"].classList.remove("invalid");
-    dom["confirm-udp-scan"].disabled = attempts === 0 || attempts > 4_096;
+    disableControl(dom["confirm-udp-scan"], attempts === 0 || attempts > 4_096);
   } catch (error) {
     dom["udp-scan-summary"].textContent = error.message;
     dom["udp-scan-summary"].classList.add("invalid");
-    dom["confirm-udp-scan"].disabled = true;
+    disableControl(dom["confirm-udp-scan"], true);
   }
 }
 
 function bindEvents() {
+  dom["reload-demo"].addEventListener("click", () => window.location.reload());
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.addEventListener("click", () => switchSection(button.dataset.section));
   });
@@ -1286,7 +1315,7 @@ function bindEvents() {
     }
   });
   dom["database-export"].addEventListener("click", () => {
-    window.location.href = "/api/database/export";
+    downloadExport("database");
   });
   dom["database-file"].addEventListener("change", previewDatabaseFile);
   dom["database-import"].addEventListener("click", importDatabase);
@@ -1361,14 +1390,14 @@ function bindEvents() {
       !key.startsWith(`${state.view}:`) && !currentIds.has(key),
     ));
     renderGraph();
-    await api("/api/layout", { method: "PUT", body: { positions: {} } });
+    await runtime.saveLayout({});
     showToast("Automatic layout restored.");
   });
   dom["export-json"].addEventListener("click", () => {
-    window.location.href = "/api/export";
+    downloadExport("json");
   });
-  dom["export-inventory-csv"].addEventListener("click", () => { window.location.href = "/api/export/inventory.csv"; });
-  dom["export-ports-csv"].addEventListener("click", () => { window.location.href = "/api/export/ports.csv"; });
+  dom["export-inventory-csv"].addEventListener("click", () => { downloadExport("inventory"); });
+  dom["export-ports-csv"].addEventListener("click", () => { downloadExport("ports"); });
   dom["export-svg"].addEventListener("click", exportSvg);
   window.addEventListener("resize", debounce(renderGraph, 120));
 }
@@ -1377,7 +1406,7 @@ async function previewDatabaseFile(event) {
   const file = event.target.files?.[0];
   event.target.value = "";
   state.pendingDatabaseImport = null;
-  dom["database-import"].disabled = true;
+  disableControl(dom["database-import"], true);
   dom["database-import-preview"].classList.remove("invalid");
   if (!file) {
     dom["database-import-preview"].textContent = "No file selected.";
@@ -1395,7 +1424,7 @@ async function previewDatabaseFile(event) {
     const preview = await api("/api/database/import/preview", { method: "POST", body: { database } });
     state.pendingDatabaseImport = database;
     dom["database-import-preview"].textContent = databasePreviewText(preview.summary, file.name);
-    dom["database-import"].disabled = state.scanning;
+    disableControl(dom["database-import"], state.scanning);
   } catch (error) {
     dom["database-import-preview"].textContent = `Cannot import this file: ${error.message}`;
     dom["database-import-preview"].classList.add("invalid");
@@ -1405,8 +1434,8 @@ async function previewDatabaseFile(event) {
 async function importDatabase() {
   if (!state.pendingDatabaseImport || state.scanning) return;
   if (!window.confirm("Replace the current Boushun database with the validated file? A local backup of the current database will be created first.")) return;
-  dom["database-import"].disabled = true;
-  dom["database-reset"].disabled = true;
+  disableControl(dom["database-import"], true);
+  disableControl(dom["database-reset"], true);
   setLoading(true, "Importing database", "Creating a backup, then replacing the local state.");
   try {
     const result = await api("/api/database/import", {
@@ -1423,8 +1452,8 @@ async function importDatabase() {
     showToast(error.message, true);
   } finally {
     setLoading(false);
-    dom["database-reset"].disabled = state.scanning;
-    dom["database-import"].disabled = state.scanning || !state.pendingDatabaseImport;
+    disableControl(dom["database-reset"], state.scanning);
+    disableControl(dom["database-import"], state.scanning || !state.pendingDatabaseImport);
   }
 }
 
@@ -1435,8 +1464,8 @@ async function resetDatabase() {
     if (confirmation !== null) showToast("Database reset cancelled: confirmation did not match.", true);
     return;
   }
-  dom["database-import"].disabled = true;
-  dom["database-reset"].disabled = true;
+  disableControl(dom["database-import"], true);
+  disableControl(dom["database-reset"], true);
   setLoading(true, "Resetting database", "Creating a backup, then clearing the local state.");
   try {
     const result = await api("/api/database/reset", { method: "POST", body: { confirmation: "RESET" } });
@@ -1450,8 +1479,8 @@ async function resetDatabase() {
     showToast(error.message, true);
   } finally {
     setLoading(false);
-    dom["database-reset"].disabled = state.scanning;
-    dom["database-import"].disabled = state.scanning || !state.pendingDatabaseImport;
+    disableControl(dom["database-reset"], state.scanning);
+    disableControl(dom["database-import"], state.scanning || !state.pendingDatabaseImport);
   }
 }
 
@@ -1635,16 +1664,16 @@ async function pollScan(id) {
 
 async function cancelScan() {
   if (!state.scanJobId) return;
-  dom["cancel-scan"].disabled = true;
-  dom["global-cancel-scan"].disabled = true;
+  disableControl(dom["cancel-scan"], true);
+  disableControl(dom["global-cancel-scan"], true);
   try {
     const { job } = await api(`/api/scans/${encodeURIComponent(state.scanJobId)}`, { method: "DELETE" });
     renderScanStatus(job);
   } catch (error) {
     showToast(error.message, true);
   } finally {
-    dom["cancel-scan"].disabled = false;
-    dom["global-cancel-scan"].disabled = false;
+    disableControl(dom["cancel-scan"], false);
+    disableControl(dom["global-cancel-scan"], false);
   }
 }
 
@@ -1773,7 +1802,7 @@ function renderScanStatus(job) {
   dom["scan-status-count"].textContent = `${progress.completed ?? 0} / ${progress.total ?? 0}`;
   dom["scan-status-results"].textContent = scanResultLabel(job);
   dom["scan-status-elapsed"].textContent = formatElapsed(elapsedMs);
-  dom["global-cancel-scan"].disabled = !job.id || job.status === "cancelling";
+  disableControl(dom["global-cancel-scan"], !job.id || job.status === "cancelling");
   dom["global-cancel-scan"].textContent = job.status === "cancelling" ? "Cancelling…" : "Cancel scan";
   updateScanButtonLabels(job);
 }
@@ -1781,7 +1810,7 @@ function renderScanStatus(job) {
 function hideScanStatus() {
   state.activeJob = null;
   dom["scan-status"].classList.add("hidden");
-  dom["global-cancel-scan"].disabled = false;
+  disableControl(dom["global-cancel-scan"], false);
   dom["global-cancel-scan"].textContent = "Cancel scan";
   updateScanButtonLabels(null);
   renderDatabase(state.payload?.database);
@@ -1851,33 +1880,32 @@ function presetLabel(value) {
 }
 
 function toggleScanButtons(disabled) {
-  dom["passive-scan"].disabled = disabled;
-  dom["open-scan-dialog"].disabled = disabled || !(state.payload?.snapshot?.scanCandidates?.length);
-  dom["open-service-dialog"].disabled = disabled || !(state.payload?.snapshot?.scanCandidates?.length);
-  dom["open-udp-dialog"].disabled = disabled || !(state.payload?.snapshot?.scanCandidates?.length);
-  dom["ports-run-tcp"].disabled = disabled || !(state.payload?.snapshot?.scanCandidates?.length);
-  dom["ports-run-udp"].disabled = disabled || !(state.payload?.snapshot?.scanCandidates?.length);
-  dom["ports-empty-tcp"].disabled = disabled || !(state.payload?.snapshot?.scanCandidates?.length);
-  dom["ports-empty-udp"].disabled = disabled || !(state.payload?.snapshot?.scanCandidates?.length);
-  dom["drawer-rescan-tcp"].disabled = disabled;
-  dom["drawer-rescan-udp"].disabled = disabled;
-  document.querySelectorAll(".schedule-run").forEach((button) => { button.disabled = disabled; });
-  dom["graph-empty-deep"].disabled = disabled || !(state.payload?.snapshot?.scanCandidates?.length);
-  dom["database-import"].disabled = disabled || !state.pendingDatabaseImport;
-  dom["database-reset"].disabled = disabled;
-  dom["database-collect-facts"].disabled = disabled;
+  disableControl(dom["passive-scan"], disabled);
+  disableControl(dom["open-scan-dialog"], disabled || !(state.payload?.snapshot?.scanCandidates?.length));
+  disableControl(dom["open-service-dialog"], disabled || !(state.payload?.snapshot?.scanCandidates?.length));
+  disableControl(dom["open-udp-dialog"], disabled || !(state.payload?.snapshot?.scanCandidates?.length));
+  disableControl(dom["ports-run-tcp"], disabled || !(state.payload?.snapshot?.scanCandidates?.length));
+  disableControl(dom["ports-run-udp"], disabled || !(state.payload?.snapshot?.scanCandidates?.length));
+  disableControl(dom["ports-empty-tcp"], disabled || !(state.payload?.snapshot?.scanCandidates?.length));
+  disableControl(dom["ports-empty-udp"], disabled || !(state.payload?.snapshot?.scanCandidates?.length));
+  disableControl(dom["drawer-rescan-tcp"], disabled);
+  disableControl(dom["drawer-rescan-udp"], disabled);
+  document.querySelectorAll(".schedule-run").forEach((button) => { disableControl(button, disabled); });
+  disableControl(dom["graph-empty-deep"], disabled || !(state.payload?.snapshot?.scanCandidates?.length));
+  disableControl(dom["database-import"], disabled || !state.pendingDatabaseImport);
+  disableControl(dom["database-reset"], disabled);
+  disableControl(dom["database-collect-facts"], disabled);
 }
 
-async function api(url, options = {}) {
-  const requestOptions = { ...options, headers: { ...(options.headers ?? {}) } };
-  if (options.body !== undefined) {
-    requestOptions.headers["content-type"] = "application/json";
-    requestOptions.body = JSON.stringify(options.body);
-  }
-  const response = await fetch(url, requestOptions);
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
-  return body;
+function downloadExport(kind) {
+  const { href, fileName } = runtime.exportTarget(kind);
+  const link = document.createElement("a");
+  link.href = href;
+  if (fileName) link.download = fileName;
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
 }
 
 function exportSvg() {

@@ -1,5 +1,7 @@
 # Boushun HTTP API
 
+This reference describes the loopback-only Node.js server, including the local synthetic demo server. The public static demo exposes none of these HTTP endpoints: its browser runtime reads a generated fixture and static export files, rejects API mutations locally, and never falls back to a Boushun server. Captured route keys are an internal fixture contract, not a public HTTP API. See [static-demo operations](operations.md#static-demo-build-and-publication) and the [security boundary](../SECURITY.md#static-demo-publication).
+
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/health` | Health and active scan |

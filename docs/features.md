@@ -28,3 +28,21 @@ Boushun 0.1.0 provides:
 - Semantic diffs for device identity, IP assignment, services, and links; ARP state-only churn is ignored.
 - Full database export, validated import preview, and confirmed reset with automatic rolling pre-change backups.
 - Zoom, pan, viewport reset, node pinning, search, JSON/SVG export, and atomic local storage.
+
+## Static read-only demo
+
+The [public demo](https://emstoo.github.io/boushun/) uses the same UI with bundled synthetic observations and no live Boushun backend. The capabilities above describe the local server; the static demo has these limits:
+
+| Capability | Local server | Static demo |
+|---|---|---|
+| Observations | Local collection and configured integrations | Generated synthetic snapshot only; no LAN collection |
+| Navigation, search, filters, node inspection, pan/zoom | Available | Available |
+| Node dragging and automatic-layout reset | Positions can be saved to the database | Current page session only; reload discards changes |
+| JSON, SVG, inventory/ports/target CSV exports | Available | Synthetic data only; JSON and inventory/ports CSV are build-time files |
+| History comparison | Available when at least two snapshots exist | One generated snapshot; comparison is disabled |
+| Scan, identity, interface-policy, schedule, and notification changes | Available subject to normal validation and busy-state restrictions | Disabled, including dynamically rendered controls |
+| Database export, import, and reset | Available | Disabled; the database summary is view-only |
+
+Fixture-loading failures show a persistent error and a reload action while mutations remain disabled. Layout changes are not persisted to browser storage or a server. See [operations](operations.md#static-demo-build-and-publication) for generation, publication, and recovery.
+
+The local synthetic demo server uses the normal writable runtime and the same server safety checks. It is not the static read-only mode and must not be published remotely.

@@ -12,5 +12,6 @@ export default defineConfig({
     ...devices["Desktop Chrome"],
     headless: true,
     trace: "retain-on-failure",
+    screenshot: "only-on-failure",
   },
 });
