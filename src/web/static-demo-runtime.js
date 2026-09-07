@@ -24,6 +24,12 @@ window.fetch = async (input, init = {}) => {
   return jsonResponse(200, fixture.routes[route]);
 };
 
+const staticExports = {
+  "export-json": ["./boushun-demo.json", "boushun-demo.json"],
+  "export-inventory-csv": ["./boushun-inventory.csv", "boushun-inventory.csv"],
+  "export-ports-csv": ["./boushun-open-ports.csv", "boushun-open-ports.csv"],
+};
+
 const blockedSelectors = [
   "#passive-scan",
   "#open-scan-dialog",
@@ -51,10 +57,12 @@ const blockedSelectors = [
   "#device-editor button",
   "#merge-device",
   "#split-device",
+  "#interface-body input[type=\"checkbox\"]",
   "#schedule-form",
   "#schedule-form input",
   "#schedule-form select",
   "#schedule-form button",
+  ".schedule-actions button",
   ".schedule-run",
   ".schedule-delete",
   "#mark-notifications-read",
@@ -74,7 +82,7 @@ lockMutatingControls();
 const observer = new MutationObserver(() => lockMutatingControls());
 observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "class"] });
 
-document.addEventListener("click", blockMutation, true);
+document.addEventListener("click", handleClick, true);
 document.addEventListener("submit", blockMutation, true);
 
 function apiRoute(pathname) {
@@ -97,11 +105,35 @@ function lockMutatingControls() {
   }
 }
 
+function handleClick(event) {
+  const target = event.target instanceof Element ? event.target : null;
+  const exportButton = target?.closest(Object.keys(staticExports).map((id) => `#${id}`).join(","));
+  if (exportButton) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    downloadStaticExport(exportButton.id);
+    return;
+  }
+  blockMutation(event);
+}
+
 function blockMutation(event) {
   const target = event.target instanceof Element ? event.target.closest(blockedSelectors) : null;
   if (!target) return;
   event.preventDefault();
   event.stopImmediatePropagation();
+}
+
+function downloadStaticExport(id) {
+  const [path, fileName] = staticExports[id] ?? [];
+  if (!path) return;
+  const link = document.createElement("a");
+  link.href = new URL(path, window.location.href).href;
+  link.download = fileName;
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
 }
 
 function configureDemoBanner() {
