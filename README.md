@@ -47,6 +47,8 @@ Static fixture loading has a 15-second timeout covering the request and response
 
 On pushes to `main`, the Pages workflow builds `dist/demo/` and deploys that artifact to `https://emstoo.github.io/boushun/`. Generated assets use relative paths so the site works below the GitHub Pages project subpath.
 
+After deployment, a separate read-only smoke job opens that public URL in Chromium and checks the document, synthetic fixture, visible topology, disabled scan controls, and a JSON download matching the loaded snapshot. The test has a 60-second limit with no retries. A failure fails the workflow but does not undo the completed deployment; inspect the failure diagnostics before rerunning or deploying a reviewed fix. This checks the served site's basic functionality, not that every CDN edge serves the latest commit.
+
 Before the first deployment, enable GitHub Pages once in the repository settings: **Settings → Pages → Build and deployment → Source → GitHub Actions**. The workflow uses the repository `GITHUB_TOKEN` for deployment; GitHub's `actions/configure-pages` action cannot enable Pages itself with that token, so this one-time repository setting is required before the first successful publish.
 
 `npm run demo` is different: it starts the normal Boushun Node.js server locally with synthetic collection enabled. It remains subject to the same loopback-only server boundary as a normal local installation.
@@ -111,7 +113,11 @@ npm run verify:screenshots
 
 `npm run demo:build` produces the same static artifact shape uploaded by the GitHub Pages workflow. Its automated test verifies synthetic projected state, representative TCP/UDP services, history detail, generated JSON/CSV export files, read-only fixture behavior, and project-subpath-safe asset paths.
 
-`npm run test:e2e` also serves the generated static artifact at the site root and the `/boushun/` project subpath in Chromium. Pages-specific scenarios verify primary navigation, disabled scan/database/identity/interface-policy/schedule mutations even after rendering or fixture load failure, safe topology interactions, JSON/inventory/ports downloads, no console/page errors during normal use, and that no request reaches a live `/api/*` backend. CI retains a full-page Pages-preview screenshot as an artifact.
+`npm run test:e2e` also serves the generated static artifact at the site root and the `/boushun/` project subpath in Chromium. Pages-specific scenarios verify primary navigation, disabled scan/database/identity/interface-policy/schedule mutations even after rendering or fixture load failure, safe topology interactions, JSON/inventory/ports downloads, no console/page errors during normal use, and that no request reaches a live `/api/*` backend. It exercises the shared smoke check locally, including unavailable-fixture and mismatched-export cases, without contacting Pages.
+
+CI validates the committed README images before regenerating them, then validates the generated images separately. It checks PNG structure and textual metadata rather than byte-identical rendering across platforms. Browser acceptance retains a full-page Pages-preview screenshot on success; failed browser and Pages smoke tests retain Playwright traces and failure screenshots for seven days. All these diagnostics use synthetic data.
+
+After installing Chromium, `npm run test:smoke` runs only the short check against the fixed public URL `https://emstoo.github.io/boushun/`. Unlike `test:e2e`, it needs internet access and an already published demo; it does not start a local server, deploy the site, or scan a LAN.
 
 `npm run test:container` requires Docker Engine and Compose on Linux. It builds the production image and verifies passive collection, real ICMP and TCP traffic, runtime restrictions, and data persistence across container recreation in a disconnected synthetic network namespace. It ignores local Compose overrides and `.env`, requires the `boushun-ci` project and its data volume to be unused, and removes its test containers and volume afterward. Production host networking is checked in the rendered configuration; real LAN behavior, UDP, multicast, SNMP, Kubernetes, and controller acceptance still require a separately authorized environment.
 

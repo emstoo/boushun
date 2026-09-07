@@ -2,6 +2,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { startStaticDemoServer } from "./static-demo-server.js";
+import { checkStaticDemo } from "../helpers/static-demo-smoke.js";
 
 let demo;
 
@@ -11,6 +12,25 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await demo.close();
+});
+
+test("post-deployment smoke contract works at the project subpath", async ({ page }) => {
+  await checkStaticDemo(page, demo.baseURL);
+});
+
+test("smoke contract rejects an unavailable fixture", async ({ page }) => {
+  await page.route("**/demo-fixture.json", (route) => route.fulfill({ status: 503, body: "Unavailable" }));
+  await expect(checkStaticDemo(page, demo.baseURL)).rejects.toThrow("demo fixture must load");
+});
+
+test("smoke contract rejects a JSON export from a different snapshot", async ({ page }) => {
+  await page.route("**/demo-fixture.json", async (route) => {
+    const response = await route.fetch();
+    const fixture = await response.json();
+    fixture.routes["/api/state"].snapshot.id = "different-synthetic-snapshot";
+    await route.fulfill({ response, json: fixture });
+  });
+  await expect(checkStaticDemo(page, demo.baseURL)).rejects.toThrow("export must match the loaded snapshot");
 });
 
 test("static demo also loads from the site root", async ({ page }) => {

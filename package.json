@@ -10,6 +10,7 @@
     "demo:build": "node scripts/build-static-demo.js",
     "test": "node --test test/*.test.js",
     "test:e2e": "playwright test",
+    "test:smoke": "playwright test --config playwright.smoke.config.js",
     "test:container": "node scripts/test-container.js",
     "screenshots": "node scripts/capture-readme.js",
     "verify:screenshots": "node scripts/verify-readme-images.js",
