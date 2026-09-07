@@ -21,7 +21,7 @@ See the [feature reference](docs/features.md) for the complete capability list.
 
 The GitHub Pages demo is generated entirely from bundled synthetic observations. It does not connect to, inspect, or scan a real LAN, and actions that would change Boushun state are disabled. Topology navigation, search, filters, node inspection, pan/zoom, and JSON/SVG/CSV exports remain available for exploring the interface.
 
-The public demo is a generated static artifact, not a remotely exposed Boushun server. Live LAN collection still requires running Boushun locally as described below.
+The public demo is a generated static artifact, not a remotely exposed Boushun server. Live LAN collection still requires running Boushun locally as described below. See [demo capabilities and limits](docs/features.md#static-read-only-demo) and [building and publishing the demo](docs/operations.md#static-demo-build-and-publication).
 
 ## Screenshots
 
@@ -30,28 +30,6 @@ The public demo is a generated static artifact, not a remotely exposed Boushun s
 ![Boushun open ports view generated from synthetic demo data](docs/images/open-ports.png)
 
 Both screenshots are generated from a fixed-clock synthetic network by `npm run screenshots`. They contain no observations from a real LAN and can be reproduced as part of the release checks.
-
-## Static read-only demo
-
-Generate the same public-demo artifact locally with:
-
-```console
-npm run demo:build
-```
-
-The command writes a static site to `dist/demo/`. During the build, Boushun starts only on loopback with a temporary store, projects the bundled synthetic collector through the normal server APIs, captures the resulting state/history/database/automation responses and the normal JSON/inventory-CSV/ports-CSV exports, and then shuts the server down. The generated site serves those captured responses and export files without a live backend and rejects mutating API calls.
-
-The local server and static site share the same HTML, styles, and application modules. The build selects a static `runtime.js` entry point instead of the live API runtime; it does not rewrite application source or replace browser APIs. Controls declare the capabilities they require, and renderers preserve those restrictions. The static runtime reads only the captured fixture, never falls back to a live API, and keeps map layout changes within the current page session. Export targets share one definition with the build.
-
-Static fixture loading has a 15-second timeout covering the request and response body. On a timeout, HTTP error, or invalid fixture, the demo keeps mutations disabled and shows a persistent error with a **Reload demo** button. Reloading starts a fresh load and resets the session-local map layout; there are no automatic retries.
-
-On pushes to `main`, the Pages workflow builds `dist/demo/` and deploys that artifact to `https://emstoo.github.io/boushun/`. Generated assets use relative paths so the site works below the GitHub Pages project subpath.
-
-After deployment, a separate read-only smoke job opens that public URL in Chromium and checks the document, synthetic fixture, visible topology, disabled scan controls, and a JSON download matching the loaded snapshot. The test has a 60-second limit with no retries. A failure fails the workflow but does not undo the completed deployment; inspect the failure diagnostics before rerunning or deploying a reviewed fix. This checks the served site's basic functionality, not that every CDN edge serves the latest commit.
-
-Before the first deployment, enable GitHub Pages once in the repository settings: **Settings → Pages → Build and deployment → Source → GitHub Actions**. The workflow uses the repository `GITHUB_TOKEN` for deployment; GitHub's `actions/configure-pages` action cannot enable Pages itself with that token, so this one-time repository setting is required before the first successful publish.
-
-`npm run demo` is different: it starts the normal Boushun Node.js server locally with synthetic collection enabled. It remains subject to the same loopback-only server boundary as a normal local installation.
 
 ## Quick start with Docker
 
@@ -78,13 +56,13 @@ npm ci
 BOUSHUN_ALLOWED_CIDRS=192.168.50.0/24 npm start
 ```
 
-Use `npm run demo` for a local synthetic server without inspecting the LAN. Use `npm run demo:build` when you need the static read-only artifact used by GitHub Pages.
+Use `npm run demo` for a local server with synthetic observations; this is not the read-only Pages runtime. Use `npm run demo:build` to generate the static artifact as described in the [operations guide](docs/operations.md#static-demo-build-and-publication).
 
 ## Documentation
 
 - [Feature reference](docs/features.md)
 - [Configuration and data sources](docs/configuration.md)
-- [Scanning, safety, storage, and recovery](docs/operations.md)
+- [Operations: scanning, storage, static publication, and recovery](docs/operations.md)
 - [HTTP API reference](docs/api.md)
 - [Test design](docs/test-design.md)
 - [Security policy](SECURITY.md)
@@ -101,29 +79,15 @@ Active discovery is disabled unless its complete target range is covered by `BOU
 
 ```console
 npm run check
-npm run demo:build
 npx playwright install chromium
 npm run test:e2e
-npm run test:container
 npm run screenshots
 npm run verify:screenshots
 ```
 
-`npm run check` covers syntax, unit, component, store, loopback API tests, and the fixed-clock static-demo build contract. Runtime tests cover live JSON requests and layout persistence, static read-only enforcement, independent fixture responses, invalid fixtures, and export targets. Browser acceptance and screenshot generation use only the bundled synthetic fixture. Screenshot verification checks the generated PNG structure, expected width, minimum height, and absence of textual metadata.
+`npm run check` includes the static-demo build and runtime contracts. Browser acceptance covers both the local server and generated static site using synthetic data. Screenshot checks validate PNG structure and textual metadata, not byte-identical rendering across platforms.
 
-`npm run demo:build` produces the same static artifact shape uploaded by the GitHub Pages workflow. Its automated test verifies synthetic projected state, representative TCP/UDP services, history detail, generated JSON/CSV export files, read-only fixture behavior, and project-subpath-safe asset paths.
-
-`npm run test:e2e` also serves the generated static artifact at the site root and the `/boushun/` project subpath in Chromium. Pages-specific scenarios verify primary navigation, disabled scan/database/identity/interface-policy/schedule mutations even after rendering or fixture load failure, safe topology interactions, JSON/inventory/ports downloads, no console/page errors during normal use, and that no request reaches a live `/api/*` backend. It exercises the shared smoke check locally, including unavailable-fixture and mismatched-export cases, without contacting Pages.
-
-CI validates the committed README images before regenerating them, then validates the generated images separately. It checks PNG structure and textual metadata rather than byte-identical rendering across platforms. Browser acceptance retains a full-page Pages-preview screenshot on success; failed browser and Pages smoke tests retain Playwright traces and failure screenshots for seven days. All these diagnostics use synthetic data.
-
-After installing Chromium, `npm run test:smoke` runs only the short check against the fixed public URL `https://emstoo.github.io/boushun/`. Unlike `test:e2e`, it needs internet access and an already published demo; it does not start a local server, deploy the site, or scan a LAN.
-
-`npm run test:container` requires Docker Engine and Compose on Linux. It builds the production image and verifies passive collection, real ICMP and TCP traffic, runtime restrictions, and data persistence across container recreation in a disconnected synthetic network namespace. It ignores local Compose overrides and `.env`, requires the `boushun-ci` project and its data volume to be unused, and removes its test containers and volume afterward. Production host networking is checked in the rendered configuration; real LAN behavior, UDP, multicast, SNMP, Kubernetes, and controller acceptance still require a separately authorized environment.
-
-On `SIGINT` (Ctrl+C) or `SIGTERM`, container acceptance stops the active CLI process group, waits for it to close, then cleans up its test resources and exits unsuccessfully. Repeated signals do not interrupt cleanup. An existing project rejected during preflight is never removed. Cleanup failures are reported explicitly; `SIGKILL`, loss of the Docker daemon, or host shutdown can still leave resources behind and require inspection before rerunning.
-
-Coverage, environments, priorities, and release gates are defined in the [test design](docs/test-design.md).
+Container acceptance separately requires Docker Engine and Compose on Linux. See the [test execution and release gates](docs/test-design.md#8-execution-order-and-release-gates) for its command, isolation and cleanup requirements, CI ordering, and failure diagnostics. The [published-demo smoke procedure](docs/operations.md#published-demo-check-and-recovery) requires internet access and an already deployed site; it is separate from local E2E tests.
 
 ## Known boundaries
 

@@ -2,9 +2,9 @@
 
 ## 1. Purpose and Design Approach
 
-This document defines tests independently from the existing test suite. It derives test coverage for Boushun 0.1.0 from the product behavior, public APIs, configuration, data model, user interface, and operational constraints. Existing test code, test cases, fixtures, mocks, and expected values are not inputs to this design.
+This document derives required test coverage for Boushun 0.1.0 from product behavior, public APIs, configuration, data model, user interface, and operational constraints, rather than treating existing tests as the specification. The functional scenarios define the required behavior; Section 8 records the current execution paths, CI checks, and validation boundaries.
 
-The design is based on `README.md`, `SECURITY.md`, `package.json`, `compose.yaml`, `Dockerfile`, `config/snmp-targets.example.json`, `scripts/update-oui.sh`, and the production implementation under `src/`. Expected results are expressed as externally observable behavior, persisted-data invariants, and external-system boundaries rather than internal function placement.
+The design is based on the feature, API, configuration, and operations references in `docs/`, `README.md`, `SECURITY.md`, `package.json`, `compose.yaml`, `Dockerfile`, `config/snmp-targets.example.json`, the build/maintenance scripts, and the production implementation under `src/`. Expected results are expressed as externally observable behavior, persisted-data invariants, and external-system boundaries rather than internal function placement.
 
 The primary quality goals are:
 
@@ -56,7 +56,7 @@ The primary quality goals are:
 | Component | Collectors, store, jobs, and scheduler through replaceable boundaries | Temporary files and loopback only |
 | API integration | HTTP contracts with a temporary store and fake collectors | Loopback only |
 | UI/E2E | Primary browser-based user workflows | Fake APIs, static fixtures, or an isolated LAN |
-| Deployment/acceptance | Privileges, persistence, static publication boundaries, and real collection on Linux or in a container | Static artifacts or explicitly authorized isolated ranges only |
+| Deployment/acceptance | Privileges, persistence, static publication boundaries, and real collection on Linux or in a container | Local static artifacts, public-demo HTTPS checks, or explicitly authorized isolated scan ranges |
 
 P0 behavior must be covered beyond unit level at the applicable API integration or deployment boundary. Time, UUIDs, DNS, sockets, the filesystem, Kubernetes APIs, SNMP sessions, and OS commands should be controllable so routine automation is deterministic.
 
@@ -77,9 +77,9 @@ Do not use real credentials in test SNMP configuration or kubeconfig files. Secr
 ### Network test isolation
 
 - Unit and component tests replace connectors, probers, runners, APIs, and sessions. Observe destination, count, ordering, timeout, abort, and close behavior at those boundaries. Container CI additionally exercises real collection in a disconnected synthetic network namespace.
-- Tests using real sockets are restricted to loopback or a dedicated network namespace/isolated LAN.
+- Collection and local acceptance tests using real sockets are restricted to loopback or a dedicated network namespace/isolated LAN. The separate post-deployment smoke uses HTTPS to the public demo and its static resources; it never invokes a collection endpoint.
 - Acceptance tests for multicast, ICMP, and SNMP require prior authorization for both the target CIDR and devices.
-- Even in acceptance tests, constrain `BOUSHUN_ALLOWED_CIDRS` to the smallest range and verify that no packets are sent to public addresses through packet capture or a fake boundary.
+- Even in collection acceptance tests, constrain `BOUSHUN_ALLOWED_CIDRS` to the smallest range and verify that no scan packets are sent to public addresses through packet capture or a fake boundary.
 
 ## 5. Functional Test Design
 
@@ -249,6 +249,8 @@ Do not use real credentials in test SNMP configuration or kubeconfig files. Secr
 
 ### 5.10 HTTP API, exports, and security
 
+The HTTP endpoint and response-header requirements here apply to the local Boushun server. The static demo has no HTTP API; its hosting and read-only behavior are covered by UI-21 through UI-23 and DEP-08/DEP-09.
+
 | ID | Priority | Condition or action | Expected result |
 |---|---:|---|---|
 | API-01 | P0 | Request `/api/health` and `/api/state` | Return consistent status, active scan, Current projection, topologies, source health, presence, and settings |
@@ -291,6 +293,7 @@ Do not use real credentials in test SNMP configuration or kubeconfig files. Secr
 | UI-20 | P1 | Export JSON, SVG, and CSV | Preserve the selected/current meaning and never execute user-controlled content as script |
 | UI-21 | P1 | Build and load the static demo at a site root and below a subpath | Assets resolve through relative URLs, the synthetic projected state/history/service data render without a live Boushun backend, and every sidebar view remains usable |
 | UI-22 | P0 | Attempt scan, identity, schedule, notification, or database mutations in the static demo | Mutating controls remain unavailable and non-GET API requests are rejected locally, while search, view/filter changes, pan/zoom, node inspection, layout dragging, and client-side exports remain usable |
+| UI-23 | P1 | Static fixture request/body stalls, returns an HTTP error, or contains invalid data; then reload | Enforce the combined 15-second load deadline, clear loading, retain a persistent error and disabled mutations, and recover on a fresh page load without a live API fallback or automatic retry |
 
 ### 5.12 Deployment and operational boundaries
 
@@ -304,6 +307,7 @@ Do not use real credentials in test SNMP configuration or kubeconfig files. Secr
 | DEP-06 | P1 | Send SIGINT/SIGTERM | Stop accepting new work, stop the scheduler, and exit within a bounded interval |
 | DEP-07 | P1 | OUI update succeeds, HTTP fails, or download is empty | Replace the 0600 destination only on success and preserve an existing file on failure |
 | DEP-08 | P0 | Generate and publish `dist/demo/` | Build from synthetic projected API responses only; emit static assets/fixtures with no live collector or server dependency, preserve subpath hosting, and never require relaxing loopback/Host/Origin protections in the production server |
+| DEP-09 | P1 | Run the smoke against the published project URL | Require a successful document and synthetic fixture, visible topology, disabled scan controls, and a JSON download matching the loaded snapshot; fail within bounded deadlines without retry or automatic rollback |
 
 ## 6. Cross-Cutting Invariants
 
@@ -342,17 +346,45 @@ After each injected failure, verify that the process remains responsive, `state.
 
 ## 8. Execution Order and Release Gates
 
-The public CI gate runs three independent jobs:
+### 8.1 Pre-merge CI and local acceptance
 
-1. `npm run check` on every supported Node.js release line for syntax, unit, component, store, and loopback API tests. This includes a fixed-clock static-demo build test that captures projected synthetic API responses, verifies representative TCP/UDP and history data, checks subpath-safe assets, and asserts the read-only fixture contract.
-2. `npm run test:e2e` in Chromium against a fixed-clock synthetic snapshot, followed by `npm run screenshots` and `npm run verify:screenshots` to validate generated PNG dimensions and reject textual metadata without requiring a real LAN. Exact image bytes are not compared across operating systems because browser rendering and fonts vary by runner.
+The [CI workflow](../.github/workflows/ci.yml) runs three job groups; the Node.js group expands into the supported-version matrix:
+
+1. `npm run check` on Node.js 22.0.0 and the latest releases of the supported 22, 24, and 26 lines for syntax, unit, component, store, and loopback API tests. This includes a fixed-clock static-demo build test that captures projected synthetic API responses, verifies representative TCP/UDP and history data, checks shared-asset/runtime selection and export files, and asserts the read-only fixture contract. Runtime unit tests cover live JSON requests, layout persistence, static mutation rejection, shared fixture loading with independent response objects, request/body deadlines, invalid fixtures, and export targets.
+2. Browser acceptance first runs `npm run verify:screenshots` against the committed README images, before any regeneration can overwrite them. It then runs `npm run test:e2e` in Chromium against the fixed-clock synthetic server and generated static site. Static cases cover root and `/boushun/` hosting, primary navigation, render-time capability restrictions, fixture failures and reload recovery, JSON/CSV downloads, and no live `/api/*` requests or console/page errors during normal use. The shared smoke contract is exercised locally, including unavailable-fixture and mismatched-export cases, without contacting Pages. After acceptance, CI uploads the Pages preview image, runs `npm run screenshots`, and validates the regenerated images with `npm run verify:screenshots`. PNG checks cover structure, expected width, minimum height, and absence of textual metadata; exact bytes are not compared across operating systems because browser rendering and fonts vary by runner.
 3. `npm run test:container` builds the production image and validates the production Compose host-network configuration. Runtime checks share a disconnected synthetic fixture's network namespace: passive collection must discover its dummy interface, ICMP must succeed, and a TCP scan must find its service. The application retains its non-root user, read-only root filesystem, `NET_RAW`-only capability boundary, health check, persistent volume, and restricted temporary filesystem. Writes to the root filesystem and execution from `/tmp` must actually fail. Recreating the application container must preserve exported state and layout. Only the isolated fixture receives `NET_ADMIN` to create the dummy interface; neither container can reach the host LAN. The script ignores local overrides and `.env`, refuses an existing `boushun-ci` project or data volume, and removes its synthetic containers and volume on completion or test failure.
+
+Run local checks from the repository root after `npm ci`, using a supported Node.js version. Install the matching browser with `npx playwright install chromium`; on supported Linux CI runners, `npx playwright install --with-deps chromium` also installs browser system dependencies. See the official [Playwright browser installation reference](https://playwright.dev/docs/browsers#install-browsers). Container acceptance additionally requires Docker Engine and the Compose plugin on Linux. It is not part of the browser test command.
+
+On `SIGINT` or `SIGTERM`, container acceptance stops the active CLI process group, waits for it to close, then cleans up the resources it claimed and exits unsuccessfully. Repeated signals do not interrupt cleanup. A project refused during preflight is never removed. Cleanup failures are reported; `SIGKILL`, Docker daemon loss, or host shutdown may leave resources behind. Inspect their ownership before rerunning instead of blindly deleting an existing project.
 
 CodeQL default setup runs independently of these jobs. The default branch also has an active code-scanning ruleset requiring CodeQL results, with `errors` and `high_or_higher` alert thresholds; its intended configuration is tracked in [the ruleset file](../.github/code-scanning-ruleset.json). The file alone does not activate GitHub enforcement. Existing functional checks and the no-bypass policy remain required.
 
 Real host-LAN behavior, UDP, multicast, SNMP, and external Kubernetes/controller acceptance is intentionally excluded from public CI. Run those checks only in an explicitly authorized isolated Linux environment and record the scope and result for the release. The synthetic container checks do not prove compatibility with those external integrations.
 
 Progression requires all P0 tests to pass. A P1 failure must be explicitly accepted with cause, impact, and workaround. Any unexplained timeout, partial failure, data discrepancy, resource leak, or credential-marker appearance blocks progression. A timeout that passes on retry is not accepted until its cause is understood.
+
+### 8.2 Post-deployment smoke
+
+The [Pages workflow](../.github/workflows/pages.yml) builds, deploys, and then runs a separate read-only `Published demo smoke` job. It is a post-publication check, not a pull-request merge gate. The [shared smoke helper](../test/helpers/static-demo-smoke.js) is used by both local static E2E cases and [the public-site test](../test/smoke/pages.spec.js), so local tests verify the assertion logic without claiming that Pages itself is available.
+
+After dependencies and Chromium are installed, `npm run test:smoke` targets only `https://emstoo.github.io/boushun/`. It requires internet access and an already published demo, starts no server, and never invokes LAN collection. Success requires the document and fixture to load, the synthetic identity and read-only marker to match, topology to be visible, the loading-error banner to be hidden, scan controls to be disabled, and a successful JSON download with the expected filename and snapshot ID matching the loaded fixture.
+
+[playwright.smoke.config.js](../playwright.smoke.config.js) sets a 60-second test timeout, 90-second global timeout, 20-second navigation/action timeouts, and zero retries; assertions retain the shared 5-second timeout. The workflow job has a 5-minute limit including dependency and browser setup. A failure marks the workflow failed but does not undo a completed deployment. Inspect the cause before rerunning; follow [the publication recovery procedure](operations.md#published-demo-check-and-recovery).
+
+This is a short served-site check, not exhaustive UI acceptance, continuous uptime monitoring, validation of every CDN edge, or proof that the latest commit is served everywhere. Broader static UI behavior is covered before merge. A publication is not considered validated until its deploy and smoke jobs both succeed; local acceptance alone cannot establish that result.
+
+### 8.3 Diagnostic artifacts
+
+The browser and smoke configurations retain Playwright traces and screenshots on test failure. The workflows upload these synthetic artifacts for seven days:
+
+| Artifact | When uploaded | Source |
+|---|---|---|
+| `static-demo-pages-screenshot` | After successful browser acceptance | `test-results/static-demo-pages.png` |
+| `browser-failure-diagnostics` | When the browser acceptance test step fails | `test-results/` |
+| `pages-smoke-failure-diagnostics` | When the public smoke test step fails | `test-results/smoke/` |
+
+Setup failures, cancellation, and forced termination may produce no Playwright artifact; inspect the job logs in those cases. Failures in committed-image validation or screenshot generation are reported by their own steps, not the browser-test failure artifact condition. Never substitute live-network screenshots or data for these synthetic diagnostics.
 
 ## 9. Completion Criteria
 
@@ -363,4 +395,5 @@ Progression requires all P0 tests to pass. A P1 failure must be explicitly accep
 - UDP uncertainty, Physical unplaced devices, ClusterIP collapse, and identity conflicts retain their meaning in both UI and API.
 - Credential markers never appear in APIs, exports, evidence, warnings, errors, logs, or UI.
 - The static demo is reproducibly generated from synthetic projected data, remains read-only without a live backend, and can be hosted from a subpath without weakening production server boundaries.
+- Committed and regenerated screenshots pass their separate checks; each publication records its deployment and public smoke outcome, including any diagnostic or recovery action.
 - Test results record the execution environment, fixture provenance, authorized network scope, and remaining known limitations.
