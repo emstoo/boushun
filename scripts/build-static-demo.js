@@ -44,6 +44,12 @@ export async function buildStaticDemo(options = {}) {
       routes[route] = await captureJson(baseURL, route);
     }
 
+    const staticExports = await Promise.all([
+      ["boushun-demo.json", "/api/export"],
+      ["boushun-inventory.csv", "/api/export/inventory.csv"],
+      ["boushun-open-ports.csv", "/api/export/ports.csv"],
+    ].map(async ([fileName, route]) => [fileName, await captureFile(baseURL, route)]));
+
     await rm(outputDirectory, { recursive: true, force: true });
     await mkdir(outputDirectory, { recursive: true });
 
@@ -51,6 +57,7 @@ export async function buildStaticDemo(options = {}) {
       cp(path.join(webDirectory, "viewport.js"), path.join(outputDirectory, "viewport.js")),
       cp(path.join(webDirectory, "layout.js"), path.join(outputDirectory, "layout.js")),
       cp(path.join(webDirectory, "static-demo-runtime.js"), path.join(outputDirectory, "static-demo-runtime.js")),
+      ...staticExports.map(([fileName, contents]) => writeFile(path.join(outputDirectory, fileName), contents)),
     ]);
 
     const styles = await readFile(path.join(webDirectory, "styles.css"), "utf8");
@@ -84,6 +91,12 @@ async function captureJson(baseURL, route) {
   const response = await fetch(`${baseURL}${route}`);
   if (!response.ok) throw new Error(`Unable to capture ${route} (${response.status})`);
   return response.json();
+}
+
+async function captureFile(baseURL, route) {
+  const response = await fetch(`${baseURL}${route}`);
+  if (!response.ok) throw new Error(`Unable to capture ${route} (${response.status})`);
+  return Buffer.from(await response.arrayBuffer());
 }
 
 export function staticIndex(source) {
