@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { collectDemo } from "../src/collectors/demo.js";
 import { createBoushunServer } from "../src/server.js";
+import { waitForCompletedScan } from "./helpers/wait-for-scan.js";
 
 test("HTTP integration contract", async (t) => {
   const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "boushun-test-"));
@@ -111,13 +112,7 @@ test("HTTP integration contract", async (t) => {
   });
   assert.equal(scanResponse.status, 202);
   const started = await scanResponse.json();
-  let job;
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const jobResponse = await fetch(`http://127.0.0.1:${address.port}/api/scans/${started.job.id}`);
-    job = (await jobResponse.json()).job;
-    if (job.status === "completed") break;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
+  const job = await waitForCompletedScan(`http://127.0.0.1:${address.port}/api/scans/${started.job.id}`);
   assert.equal(job.status, "completed");
   });
 
@@ -172,12 +167,7 @@ test("HTTP integration contract", async (t) => {
   });
   assert.equal(serviceScanResponse.status, 202);
   const serviceStarted = await serviceScanResponse.json();
-  let serviceJob;
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    serviceJob = (await (await fetch(`http://127.0.0.1:${address.port}/api/scans/${serviceStarted.job.id}`)).json()).job;
-    if (serviceJob.status === "completed") break;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
+  const serviceJob = await waitForCompletedScan(`http://127.0.0.1:${address.port}/api/scans/${serviceStarted.job.id}`);
   assert.equal(serviceJob.status, "completed");
   const serviceState = await (await fetch(`http://127.0.0.1:${address.port}/api/state`)).json();
   assert.equal(serviceState.snapshot.profile, "current");
@@ -193,12 +183,7 @@ test("HTTP integration contract", async (t) => {
   });
   assert.equal(laterPassiveResponse.status, 202);
   const laterPassiveStarted = await laterPassiveResponse.json();
-  let laterPassiveJob;
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    laterPassiveJob = (await (await fetch(`http://127.0.0.1:${address.port}/api/scans/${laterPassiveStarted.job.id}`)).json()).job;
-    if (laterPassiveJob.status === "completed") break;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
+  const laterPassiveJob = await waitForCompletedScan(`http://127.0.0.1:${address.port}/api/scans/${laterPassiveStarted.job.id}`);
   assert.equal(laterPassiveJob.status, "completed");
   const laterState = await (await fetch(`http://127.0.0.1:${address.port}/api/state`)).json();
   assert.notEqual(laterState.snapshot.id, serviceState.snapshot.id);
@@ -215,12 +200,7 @@ test("HTTP integration contract", async (t) => {
   });
   assert.equal(udpScanResponse.status, 202);
   const udpStarted = await udpScanResponse.json();
-  let udpJob;
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    udpJob = (await (await fetch(`http://127.0.0.1:${address.port}/api/scans/${udpStarted.job.id}`)).json()).job;
-    if (udpJob.status === "completed") break;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
+  const udpJob = await waitForCompletedScan(`http://127.0.0.1:${address.port}/api/scans/${udpStarted.job.id}`);
   assert.equal(udpJob.status, "completed");
   const udpState = await (await fetch(`http://127.0.0.1:${address.port}/api/state`)).json();
   assert.equal(udpState.snapshot.profile, "current");
@@ -249,12 +229,7 @@ test("HTTP integration contract", async (t) => {
     body: JSON.stringify({ cidr: "192.168.50.0/30", preset: "custom", customPorts: "8080" }),
   });
   const repeatTcpStarted = await repeatTcpResponse.json();
-  let repeatTcpJob;
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    repeatTcpJob = (await (await fetch(`http://127.0.0.1:${address.port}/api/scans/${repeatTcpStarted.job.id}`)).json()).job;
-    if (repeatTcpJob.status === "completed") break;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
+  const repeatTcpJob = await waitForCompletedScan(`http://127.0.0.1:${address.port}/api/scans/${repeatTcpStarted.job.id}`);
   assert.equal(repeatTcpJob.status, "completed");
   const repeatedState = await (await fetch(`http://127.0.0.1:${address.port}/api/state`)).json();
   assert.equal(repeatedState.tcpServiceObservation.changes.comparable, true);
@@ -270,12 +245,7 @@ test("HTTP integration contract", async (t) => {
     body: JSON.stringify({ cidr: "192.168.50.0/30", preset: "custom", customPorts: "8080" }),
   });
   const closedStarted = await closedScan.json();
-  let closedJob;
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    closedJob = (await (await fetch(`http://127.0.0.1:${address.port}/api/scans/${closedStarted.job.id}`)).json()).job;
-    if (closedJob.status === "completed") break;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
+  await waitForCompletedScan(`http://127.0.0.1:${address.port}/api/scans/${closedStarted.job.id}`);
   const closedState = await (await fetch(`http://127.0.0.1:${address.port}/api/state`)).json();
   assert.equal(closedState.tcpServiceObservation.closedEndpoints[0].state, "not-open");
   });
@@ -305,12 +275,7 @@ test("HTTP integration contract", async (t) => {
   });
   assert.equal(scheduledResponse.status, 202);
   const scheduledStarted = await scheduledResponse.json();
-  let scheduledJob;
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    scheduledJob = (await (await fetch(`http://127.0.0.1:${address.port}/api/scans/${scheduledStarted.job.id}`)).json()).job;
-    if (scheduledJob.status === "completed") break;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
+  const scheduledJob = await waitForCompletedScan(`http://127.0.0.1:${address.port}/api/scans/${scheduledStarted.job.id}`);
   assert.equal(scheduledJob.status, "completed");
   const notified = await (await fetch(`http://127.0.0.1:${address.port}/api/automation`)).json();
   assert.equal(notified.notifications[0].type, "new-port");
@@ -443,9 +408,5 @@ test("[DB-10] database replacement is rejected while a scan is active", async (t
     backupsBefore,
   );
   releaseScan();
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const scan = await (await fetch(`http://127.0.0.1:${address.port}/api/scans/${started.job.id}`)).json();
-    if (scan.job.status === "completed") break;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
+  await waitForCompletedScan(`http://127.0.0.1:${address.port}/api/scans/${started.job.id}`);
 });
