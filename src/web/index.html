@@ -6,12 +6,12 @@
     <meta name="color-scheme" content="dark">
     <meta name="theme-color" content="#07110f">
     <title>Boushun · Network Map</title>
-    <link rel="stylesheet" href="/styles.css?v=0.1.0-ui1">
+    <link rel="stylesheet" href="./styles.css?v=0.1.0-ui1">
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar">
-        <a class="brand" href="/" aria-label="Boushun home">
+        <a class="brand" href="./" aria-label="Boushun home">
           <span class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 32 32" role="img">
               <path d="M11 4h10M13 4l-2 7v11l5 5 5-5V11l-2-7M11 12h10M11 21h10"/>
@@ -58,7 +58,7 @@
             <div><dt>Host</dt><dd id="probe-host">—</dd></div>
             <div><dt>Mode</dt><dd id="probe-mode">Passive</dd></div>
           </dl>
-          <button class="button secondary full" id="passive-scan">Refresh facts</button>
+          <button class="button secondary full" id="passive-scan" data-capability="collect">Refresh facts</button>
         </section>
         <p class="privacy-note">All observations stay on this machine.</p>
       </aside>
@@ -73,9 +73,9 @@
           <div class="top-actions">
             <button class="button tertiary" id="export-json">Export JSON</button>
             <button class="button tertiary" id="export-svg">Export SVG</button>
-            <button class="button secondary" id="open-service-dialog">Scan TCP</button>
-            <button class="button secondary" id="open-udp-dialog">Scan UDP</button>
-            <button class="button primary" id="open-scan-dialog">
+            <button class="button secondary" id="open-service-dialog" data-capability="collect">Scan TCP</button>
+            <button class="button secondary" id="open-udp-dialog" data-capability="collect">Scan UDP</button>
+            <button class="button primary" id="open-scan-dialog" data-capability="collect">
               <span aria-hidden="true">↻</span> Scan network
             </button>
           </div>
@@ -104,7 +104,7 @@
               <div><dt>Elapsed</dt><dd id="scan-status-elapsed">0s</dd></div>
             </dl>
           </div>
-          <button class="button secondary" id="global-cancel-scan" type="button">Cancel scan</button>
+          <button class="button secondary" id="global-cancel-scan" data-capability="collect" type="button">Cancel scan</button>
         </section>
 
         <section class="scan-status database-empty-status hidden" id="database-empty-status" aria-label="Database recovery">
@@ -115,7 +115,7 @@
             </div>
             <p>Collect local interface facts to restore eligible scan ranges.</p>
           </div>
-          <button class="button primary" id="database-collect-facts" type="button">Collect local facts</button>
+          <button class="button primary" id="database-collect-facts" data-capability="collect" type="button">Collect local facts</button>
         </section>
 
         <section class="stats-grid" aria-label="Network summary">
@@ -204,7 +204,7 @@
               <h3 id="graph-empty-title">No network observations yet</h3>
               <p id="graph-empty-copy">Refresh passive facts or run a standard scan.</p>
               <div class="empty-actions hidden" id="graph-empty-actions">
-                <button class="button primary" id="graph-empty-deep" type="button">Run Deep scan</button>
+                <button class="button primary" id="graph-empty-deep" data-capability="collect" type="button">Run Deep scan</button>
                 <button class="button secondary" id="graph-empty-sources" type="button">Review sources</button>
               </div>
             </div>
@@ -218,8 +218,8 @@
               <section class="drawer-identity-section hidden" id="drawer-identity-section">
                 <div class="drawer-section-heading"><h4>Identity review</h4><span>Review</span></div>
                 <p id="drawer-identity-copy"></p>
-                <button class="table-link hidden" id="drawer-use-suggested-name" type="button">Use suggested name</button>
-                <button class="table-link hidden" id="drawer-apply-recommended-split" type="button">Split addresses into individual devices</button>
+                <button class="table-link hidden" id="drawer-use-suggested-name" data-capability="editIdentity" type="button">Use suggested name</button>
+                <button class="table-link hidden" id="drawer-apply-recommended-split" data-capability="editIdentity" type="button">Split addresses into individual devices</button>
               </section>
               <section class="drawer-ports-section hidden" id="drawer-ports-section">
                 <div class="drawer-section-heading">
@@ -235,12 +235,12 @@
                 <h4>Address actions</h4>
                 <p id="drawer-actions-copy">Recheck one IPv4 address without scanning the whole range.</p>
                 <div class="editor-actions address-actions">
-                  <button class="button secondary" id="drawer-rescan-tcp" type="button"><span class="address-action-icon" aria-hidden="true">⇄</span>Scan TCP</button>
-                  <button class="button secondary" id="drawer-rescan-udp" type="button"><span class="address-action-icon" aria-hidden="true">≈</span>Scan UDP</button>
+                  <button class="button secondary" id="drawer-rescan-tcp" data-capability="collect" type="button"><span class="address-action-icon" aria-hidden="true">⇄</span>Scan TCP</button>
+                  <button class="button secondary" id="drawer-rescan-udp" data-capability="collect" type="button"><span class="address-action-icon" aria-hidden="true">≈</span>Scan UDP</button>
                   <button class="button tertiary" id="drawer-export-target" type="button"><span class="address-action-icon" aria-hidden="true">↓</span>Export CSV</button>
                 </div>
               </section>
-              <form class="device-editor hidden" id="device-editor">
+              <form class="device-editor hidden" id="device-editor" data-capability="editIdentity">
                 <h4>Manual identity override</h4>
                 <label>Name<input id="device-name" maxlength="120"></label>
                 <label>Role<input id="device-role" maxlength="60"></label>
@@ -259,7 +259,7 @@
               <strong id="loading-title">Scanning local network</strong>
               <small id="loading-subtitle">This can take about a minute.</small>
               <progress id="scan-progress" max="100" value="0"></progress>
-              <button class="button secondary hidden" id="cancel-scan" type="button">Cancel scan</button>
+              <button class="button secondary hidden" id="cancel-scan" data-capability="collect" type="button">Cancel scan</button>
             </div>
           </div>
           <div class="map-companion hidden" id="map-companion"></div>
@@ -294,8 +294,8 @@
                   <option value="all">All</option>
                 </select>
               </label>
-              <button class="button secondary" id="ports-run-tcp" type="button">Scan TCP</button>
-              <button class="button primary" id="ports-run-udp" type="button">Scan UDP</button>
+              <button class="button secondary" id="ports-run-tcp" data-capability="collect" type="button">Scan TCP</button>
+              <button class="button primary" id="ports-run-udp" data-capability="collect" type="button">Scan UDP</button>
               <button class="button tertiary" id="export-ports-csv" type="button">Export CSV</button>
             </div>
           </div>
@@ -313,8 +313,8 @@
             <h3 id="ports-empty-title">No service discovery results yet</h3>
             <p id="ports-empty-copy">Run TCP or UDP discovery to check every usable IP, including devices that ignore ICMP.</p>
             <div class="empty-actions">
-              <button class="button secondary" id="ports-empty-tcp" type="button">Scan TCP</button>
-              <button class="button primary" id="ports-empty-udp" type="button">Scan UDP</button>
+              <button class="button secondary" id="ports-empty-tcp" data-capability="collect" type="button">Scan TCP</button>
+              <button class="button primary" id="ports-empty-udp" data-capability="collect" type="button">Scan UDP</button>
             </div>
           </div>
           <div class="table-wrap hidden" id="ports-table-wrap">
@@ -388,7 +388,7 @@
             <span class="record-count" id="automation-summary">No schedules</span>
           </div>
           <div class="automation-grid">
-            <form class="automation-form" id="schedule-form">
+            <form class="automation-form" id="schedule-form" data-capability="automation">
               <h3>Create a schedule</h3>
               <p>Run bounded TCP or UDP discovery on an eligible private range. The first run establishes a baseline; later runs notify only newly opened ports.</p>
               <label>Protocol<select id="schedule-protocol"><option value="tcp">TCP</option><option value="udp">UDP</option></select></label>
@@ -399,7 +399,7 @@
               <button class="button primary" type="submit">Create schedule</button>
             </form>
             <section class="automation-notifications">
-              <div class="automation-heading"><div><p class="section-kicker">In-app alerts</p><h3>New ports</h3></div><button class="table-link hidden" id="mark-notifications-read" type="button">Mark all read</button></div>
+              <div class="automation-heading"><div><p class="section-kicker">In-app alerts</p><h3>New ports</h3></div><button class="table-link hidden" id="mark-notifications-read" data-capability="automation" type="button">Mark all read</button></div>
               <p>Notifications are created only when a scheduled run finds a port absent from the previous comparable scan.</p>
               <div class="notification-list" id="notification-list"></div>
             </section>
@@ -424,16 +424,16 @@
               <div class="database-action-icon" aria-hidden="true">↓</div>
               <div><p class="section-kicker">Portable backup</p><h3>Export database</h3></div>
               <p>Download every saved snapshot, layout position, identity override, interface policy, schedule, and notification as a Boushun JSON database.</p>
-              <button class="button secondary" id="database-export" type="button">Download database</button>
+              <button class="button secondary" id="database-export" data-capability="manageDatabase" type="button">Download database</button>
             </article>
             <article class="database-action-card">
               <div class="database-action-icon" aria-hidden="true">↑</div>
               <div><p class="section-kicker">Validated replacement</p><h3>Import database</h3></div>
               <p>Choose a Boushun database export. The file is validated and summarized before it can replace the current database.</p>
-              <input class="database-file-input" id="database-file" type="file" accept="application/json,.json">
+              <input class="database-file-input" id="database-file" data-capability="manageDatabase" type="file" accept="application/json,.json">
               <div class="database-card-actions">
                 <label class="button secondary" for="database-file">Choose JSON file</label>
-                <button class="button primary" id="database-import" type="button" disabled>Import database</button>
+                <button class="button primary" id="database-import" data-capability="manageDatabase" type="button" disabled>Import database</button>
               </div>
               <div class="database-import-preview" id="database-import-preview" role="status">No file selected.</div>
             </article>
@@ -441,7 +441,7 @@
               <div class="database-action-icon" aria-hidden="true">×</div>
               <div><p class="section-kicker">Destructive action</p><h3>Reset database</h3></div>
               <p>Remove all Boushun observations and saved UI state. OUI data and external Kubernetes, controller, and SNMP configuration files are not changed.</p>
-              <button class="button danger" id="database-reset" type="button">Reset database</button>
+              <button class="button danger" id="database-reset" data-capability="manageDatabase" type="button">Reset database</button>
             </article>
           </div>
           <p class="database-safety-note">Import and reset are unavailable while a scan is running. Boushun creates a local pre-change backup and retains the five newest database backups.</p>
@@ -465,7 +465,7 @@
     </div>
 
     <dialog id="scan-dialog">
-      <form method="dialog" id="scan-form">
+      <form method="dialog" id="scan-form" data-capability="collect">
         <button class="dialog-close" value="cancel" aria-label="Close">×</button>
         <span class="dialog-icon">⌁</span>
         <p class="section-kicker">Standard profile</p>
@@ -491,7 +491,7 @@
     </dialog>
 
     <dialog id="service-dialog">
-      <form method="dialog" id="service-form">
+      <form method="dialog" id="service-form" data-capability="collect">
         <button class="dialog-close" value="cancel" aria-label="Close">×</button>
         <span class="dialog-icon">⇄</span>
         <p class="section-kicker">Independent service discovery</p>
@@ -519,7 +519,7 @@
     </dialog>
 
     <dialog id="udp-dialog">
-      <form method="dialog" id="udp-form">
+      <form method="dialog" id="udp-form" data-capability="collect">
         <button class="dialog-close" value="cancel" aria-label="Close">×</button>
         <span class="dialog-icon">≈</span>
         <p class="section-kicker">Independent service discovery</p>
@@ -547,6 +547,6 @@
     </dialog>
 
     <div class="toast hidden" id="toast" role="status"></div>
-    <script type="module" src="/app.js?v=0.1.0-ui1"></script>
+    <script type="module" src="./app.js?v=0.1.0-ui1"></script>
   </body>
 </html>

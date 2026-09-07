@@ -5,10 +5,10 @@ import os from "node:os";
 import path from "node:path";
 import { buildStaticDemo } from "../../scripts/build-static-demo.js";
 
-const pagesBasePath = "/boushun/";
 const fixedDemoTime = new Date("2030-01-02T03:04:05.000Z");
 
-export async function startStaticDemoServer() {
+export async function startStaticDemoServer({ pagesBasePath = "/boushun/" } = {}) {
+  if (!["/", "/boushun/"].includes(pagesBasePath)) throw new Error("Unsupported fixture base path");
   const root = await mkdtemp(path.join(os.tmpdir(), "boushun-pages-e2e-"));
   const outputDirectory = path.join(root, "site");
   await buildStaticDemo({ outputDirectory, now: () => fixedDemoTime });
@@ -17,7 +17,7 @@ export async function startStaticDemoServer() {
   const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
 
-    if (url.pathname.startsWith("/api/")) {
+    if (url.pathname.includes("/api/")) {
       apiRequests.push(`${request.method ?? "GET"} ${url.pathname}`);
       response.writeHead(404, { "content-type": "application/json; charset=utf-8" });
       response.end(JSON.stringify({ error: "No live API is available in the Pages fixture" }));

@@ -485,6 +485,12 @@ dialog input { width: 100%; height: 43px; border: 1px solid var(--control-border
 
 .toast { position: fixed; right: 24px; bottom: 24px; max-width: min(420px, calc(100vw - 48px)); border: 1px solid var(--border-strong); border-radius: 11px; padding: 11px 14px; color: var(--text); background: #12231e; box-shadow: var(--shadow); font-size: 11px; z-index: 20; }
 
+@media (max-width: 1280px) and (min-width: 761px) {
+  .map-panel .panel-header { align-items: flex-start; flex-direction: column; }
+  .map-tools { width: 100%; flex-wrap: wrap; }
+  .map-tools .search-field { flex: 1 1 240px; width: auto; }
+}
+
 @media (max-width: 1050px) {
   .app-shell { grid-template-columns: 82px minmax(0, 1fr); }
   .sidebar { padding-inline: 13px; }

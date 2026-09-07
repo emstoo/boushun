@@ -41,6 +41,8 @@ npm run demo:build
 
 The command writes a static site to `dist/demo/`. During the build, Boushun starts only on loopback with a temporary store, projects the bundled synthetic collector through the normal server APIs, captures the resulting state/history/database/automation responses and the normal JSON/inventory-CSV/ports-CSV exports, and then shuts the server down. The generated site serves those captured responses and export files without a live backend and rejects mutating API calls.
 
+The local server and static site share the same HTML, styles, and application modules. The build selects a static `runtime.js` entry point instead of the live API runtime; it does not rewrite application source or replace browser APIs. Controls declare the capabilities they require, and renderers preserve those restrictions. The static runtime reads only the captured fixture, never falls back to a live API, and keeps map layout changes within the current page session. Export targets share one definition with the build.
+
 On pushes to `main`, the Pages workflow builds `dist/demo/` and deploys that artifact to `https://emstoo.github.io/boushun/`. Generated assets use relative paths so the site works below the GitHub Pages project subpath.
 
 Before the first deployment, enable GitHub Pages once in the repository settings: **Settings → Pages → Build and deployment → Source → GitHub Actions**. The workflow uses the repository `GITHUB_TOKEN` for deployment; GitHub's `actions/configure-pages` action cannot enable Pages itself with that token, so this one-time repository setting is required before the first successful publish.
@@ -103,11 +105,11 @@ npm run screenshots
 npm run verify:screenshots
 ```
 
-`npm run check` covers syntax, unit, component, store, loopback API tests, and the fixed-clock static-demo build contract. Browser acceptance and screenshot generation use only the bundled synthetic fixture. Screenshot verification checks the generated PNG structure, expected width, minimum height, and absence of textual metadata.
+`npm run check` covers syntax, unit, component, store, loopback API tests, and the fixed-clock static-demo build contract. Runtime tests cover live JSON requests and layout persistence, static read-only enforcement, independent fixture responses, invalid fixtures, and export targets. Browser acceptance and screenshot generation use only the bundled synthetic fixture. Screenshot verification checks the generated PNG structure, expected width, minimum height, and absence of textual metadata.
 
 `npm run demo:build` produces the same static artifact shape uploaded by the GitHub Pages workflow. Its automated test verifies synthetic projected state, representative TCP/UDP services, history detail, generated JSON/CSV export files, read-only fixture behavior, and project-subpath-safe asset paths.
 
-`npm run test:e2e` also serves the generated static artifact from the `/boushun/` project subpath in Chromium. The Pages-specific scenario verifies primary navigation, disabled scan/database/interface-policy mutations, safe topology interactions, JSON/inventory/ports downloads, no console/page errors, and that no request reaches a live `/api/*` backend. CI retains a full-page Pages-preview screenshot as an artifact.
+`npm run test:e2e` also serves the generated static artifact at the site root and the `/boushun/` project subpath in Chromium. Pages-specific scenarios verify primary navigation, disabled scan/database/identity/interface-policy/schedule mutations even after rendering or fixture load failure, safe topology interactions, JSON/inventory/ports downloads, no console/page errors during normal use, and that no request reaches a live `/api/*` backend. CI retains a full-page Pages-preview screenshot as an artifact.
 
 `npm run test:container` requires Docker Engine and Compose on Linux. It builds the production image and verifies passive collection, real ICMP and TCP traffic, runtime restrictions, and data persistence across container recreation in a disconnected synthetic network namespace. It ignores local Compose overrides and `.env`, requires the `boushun-ci` project and its data volume to be unused, and removes its test containers and volume afterward. Production host networking is checked in the rendered configuration; real LAN behavior, UDP, multicast, SNMP, Kubernetes, and controller acceptance still require a separately authorized environment.
 

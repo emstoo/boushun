@@ -1,9 +1,10 @@
-import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { collectDemo } from "../src/collectors/demo.js";
 import { createBoushunServer } from "../src/server.js";
+import { EXPORTS } from "../src/web/api-client.js";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const webDirectory = path.join(repositoryRoot, "src", "web");
@@ -44,30 +45,19 @@ export async function buildStaticDemo(options = {}) {
       routes[route] = await captureJson(baseURL, route);
     }
 
-    const staticExports = await Promise.all([
-      ["boushun-demo.json", "/api/export"],
-      ["boushun-inventory.csv", "/api/export/inventory.csv"],
-      ["boushun-open-ports.csv", "/api/export/ports.csv"],
-    ].map(async ([fileName, route]) => [fileName, await captureFile(baseURL, route)]));
+    const staticExports = await Promise.all(Object.values(EXPORTS)
+      .map(async ({ fileName, route }) => [fileName, await captureFile(baseURL, route)]));
 
     await rm(outputDirectory, { recursive: true, force: true });
     await mkdir(outputDirectory, { recursive: true });
 
+    // Shared assets are copied verbatim. Only the runtime entry point differs.
     await Promise.all([
-      cp(path.join(webDirectory, "viewport.js"), path.join(outputDirectory, "viewport.js")),
-      cp(path.join(webDirectory, "layout.js"), path.join(outputDirectory, "layout.js")),
-      cp(path.join(webDirectory, "static-demo-runtime.js"), path.join(outputDirectory, "static-demo-runtime.js")),
+      ...["index.html", "app.js", "styles.css", "viewport.js", "layout.js", "api-client.js", "capabilities.js"]
+        .map((fileName) => cp(path.join(webDirectory, fileName), path.join(outputDirectory, fileName))),
+      cp(path.join(webDirectory, "static-demo-runtime.js"), path.join(outputDirectory, "runtime.js")),
       ...staticExports.map(([fileName, contents]) => writeFile(path.join(outputDirectory, fileName), contents)),
     ]);
-
-    const styles = await readFile(path.join(webDirectory, "styles.css"), "utf8");
-    await writeFile(path.join(outputDirectory, "styles.css"), staticStyles(styles), "utf8");
-
-    const index = await readFile(path.join(webDirectory, "index.html"), "utf8");
-    await writeFile(path.join(outputDirectory, "index.html"), staticIndex(index), "utf8");
-
-    const app = await readFile(path.join(webDirectory, "app.js"), "utf8");
-    await writeFile(path.join(outputDirectory, "app.js"), staticApp(app), "utf8");
 
     const fixture = {
       generatedAt: observedAt.toISOString(),
@@ -97,26 +87,6 @@ async function captureFile(baseURL, route) {
   const response = await fetch(`${baseURL}${route}`);
   if (!response.ok) throw new Error(`Unable to capture ${route} (${response.status})`);
   return Buffer.from(await response.arrayBuffer());
-}
-
-export function staticIndex(source) {
-  return source
-    .replace('href="/" aria-label="Boushun home"', 'href="./" aria-label="Boushun home"')
-    .replace('href="/styles.css?', 'href="./styles.css?')
-    .replace(
-      '<script type="module" src="/app.js?',
-      '<script type="module" src="./static-demo-runtime.js"></script>\n    <script type="module" src="./app.js?',
-    );
-}
-
-export function staticApp(source) {
-  return source
-    .replace('from "/viewport.js"', 'from "./viewport.js"')
-    .replace('from "/layout.js"', 'from "./layout.js"');
-}
-
-export function staticStyles(source) {
-  return `${source.trimEnd()}\n\n/* Keep the public Pages preview readable at common desktop widths. */\n@media (max-width: 1280px) and (min-width: 761px) {\n  .map-panel .panel-header { align-items: flex-start; flex-direction: column; }\n  .map-tools { width: 100%; flex-wrap: wrap; }\n  .map-tools .search-field { flex: 1 1 240px; width: auto; }\n}\n`;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

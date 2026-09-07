@@ -3,23 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { buildStaticDemo, staticApp, staticIndex } from "../scripts/build-static-demo.js";
-
-test("static demo rewrites root-relative web assets for subpath hosting", () => {
-  const index = staticIndex(`
-<a class="brand" href="/" aria-label="Boushun home"></a>
-<link rel="stylesheet" href="/styles.css?v=1">
-<script type="module" src="/app.js?v=1"></script>
-`);
-  assert.match(index, /href="\.\/" aria-label="Boushun home"/);
-  assert.match(index, /href="\.\/styles\.css\?v=1"/);
-  assert.match(index, /src="\.\/static-demo-runtime\.js"/);
-  assert.match(index, /src="\.\/app\.js\?v=1"/);
-
-  const app = staticApp('import { a } from "/viewport.js";\nimport { b } from "/layout.js";');
-  assert.match(app, /from "\.\/viewport\.js"/);
-  assert.match(app, /from "\.\/layout\.js"/);
-});
+import { buildStaticDemo } from "../scripts/build-static-demo.js";
 
 test("static demo build captures projected synthetic API responses and exports", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "boushun-static-demo-test-"));
@@ -34,7 +18,7 @@ test("static demo build captures projected synthetic API responses and exports",
     const [index, app, runtime, fixtureText, exportText, inventoryCsv, portsCsv] = await Promise.all([
       readFile(path.join(outputDirectory, "index.html"), "utf8"),
       readFile(path.join(outputDirectory, "app.js"), "utf8"),
-      readFile(path.join(outputDirectory, "static-demo-runtime.js"), "utf8"),
+      readFile(path.join(outputDirectory, "runtime.js"), "utf8"),
       readFile(path.join(outputDirectory, "demo-fixture.json"), "utf8"),
       readFile(path.join(outputDirectory, "boushun-demo.json"), "utf8"),
       readFile(path.join(outputDirectory, "boushun-inventory.csv"), "utf8"),
@@ -44,9 +28,12 @@ test("static demo build captures projected synthetic API responses and exports",
     assert.doesNotMatch(index, /href="\/styles\.css/);
     assert.doesNotMatch(index, /src="\/app\.js/);
     assert.match(app, /from "\.\/viewport\.js"/);
-    assert.match(runtime, /Static demo is read-only/);
-    assert.match(runtime, /boushun-demo\.json/);
-    assert.match(runtime, /interface-body input/);
+    assert.match(runtime, /createStaticRuntime/);
+    for (const fileName of ["index.html", "app.js", "styles.css", "viewport.js", "layout.js", "api-client.js", "capabilities.js"]) {
+      assert.equal(await readFile(path.join(outputDirectory, fileName), "utf8"),
+        await readFile(new URL(`../src/web/${fileName}`, import.meta.url), "utf8"));
+    }
+    assert.equal(runtime, await readFile(new URL("../src/web/static-demo-runtime.js", import.meta.url), "utf8"));
 
     const fixture = JSON.parse(fixtureText);
     assert.equal(fixture.readOnly, true);
