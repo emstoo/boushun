@@ -93,12 +93,11 @@ button { color: inherit; }
 .privacy-note { margin: 13px 3px 0; color: var(--faint); font-size: 10px; text-align: center; }
 
 .main-content { width: min(1540px, 100%); margin-inline: auto; padding: 38px clamp(26px, 4vw, 66px) 60px; }
-.topbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 32px; }
-.eyebrow, .section-kicker { margin: 0 0 7px; color: var(--mint); font-size: 10px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
-h1, h2, h3, p { overflow-wrap: anywhere; }
-h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(31px, 4vw, 48px); font-weight: 500; letter-spacing: -.035em; }
-.last-seen { margin: 9px 0 0; color: var(--muted); font-size: 12px; }
-.top-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; padding-top: 9px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.section-kicker { margin: 0 0 7px; color: var(--mint); font-size: 10px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
+h2, h3, p { overflow-wrap: anywhere; }
+.last-seen { margin: 0; color: var(--muted); font-size: 12px; }
+.top-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; }
 
 .button { min-height: 40px; border: 1px solid transparent; border-radius: 9px; padding: 0 15px; font-size: 12px; font-weight: 700; cursor: pointer; transition: transform .12s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease; }
 .button:hover { transform: translateY(-1px); }
@@ -514,7 +513,7 @@ dialog input { width: 100%; height: 43px; border: 1px solid var(--control-border
   .nav-item { flex: 0 0 42px; width: 42px; }
   .sidebar-spacer { display: none; }
   .main-content { padding: 25px 15px 45px; }
-  .topbar { display: block; }
+  .topbar { flex-direction: column; align-items: stretch; gap: 12px; }
   .top-actions { justify-content: flex-start; }
   .stats-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
   .panel-header { align-items: flex-start; flex-direction: column; }
