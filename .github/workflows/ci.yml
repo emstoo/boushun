@@ -65,7 +65,7 @@ jobs:
         id: browser-tests
         run: npm run test:e2e
       - name: Upload Pages demo screenshot
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: static-demo-pages-screenshot
           path: test-results/static-demo-pages.png
@@ -77,7 +77,7 @@ jobs:
         run: npm run verify:screenshots
       - name: Upload browser failure diagnostics
         if: ${{ failure() && steps.browser-tests.outcome == 'failure' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: browser-failure-diagnostics
           path: test-results/
