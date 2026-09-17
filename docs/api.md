@@ -13,7 +13,7 @@ This reference describes the loopback-only Node.js server, including the local s
 | `POST` | `/api/tcp-service-scan` | Start independent range-wide TCP service discovery |
 | `GET` | `/api/udp-service-presets` | Bounded UDP protocol-probe presets |
 | `POST` | `/api/udp-service-scan` | Start independent range-wide UDP service discovery |
-| `POST` | `/api/scan` | Start `passive`, `standard`, or `deep`; returns `202` and a job |
+| `POST` | `/api/scan` | Start `local`, `passive`, `standard`, or `deep`; returns `202` and a job |
 | `GET` | `/api/scans/:id` | Poll job progress/result |
 | `DELETE` | `/api/scans/:id` | Cancel a job |
 | `GET` | `/api/automation` | Schedules, notifications, and an active scheduled scan |
@@ -38,6 +38,16 @@ This reference describes the loopback-only Node.js server, including the local s
 | `GET` | `/api/export` | Download snapshot, inventory, views, and overrides |
 | `GET` | `/api/export/inventory.csv` | Download the current device inventory as CSV |
 | `GET` | `/api/export/ports.csv` | Download current confirmed and uncertain service observations as CSV |
+
+## Observation and reset semantics
+
+`local` reads only interface and route configuration. `passive` explicitly retrieves cache and configured source records without active probes. `standard` and `deep` perform the separately authorized checks described in [operations](operations.md#scan-profiles-and-safety). Startup performs no live collection. A new local demo database is seeded once; restarting an existing or reset database never reseeds it.
+
+Projected devices and IP assignments expose `observation.kind` (`local`, `registered`, `response`, or `candidate`), `retrievedAt`, `sourceObservedAt`, `lastResponseAt`, and address/method-scoped `responses`. Unknown times are null. Device status is respectively `configured`, `registered`, `responded`, or `unconfirmed`. Cache states remain raw evidence, not device reachability. Candidate records remain in inventory exports and are excluded from default topology. Kubernetes conditions are API-reported metadata, not direct response evidence.
+
+Current state retains check coverage and original response times in `snapshot.observationChecks`. Later successful checks supersede only the addresses and ports they cover for the same method. A failed/cancelled job cannot replace saved results. Presence includes `firstRetrievedAt`, `lastRetrievedAt`, `firstResponseAt`, `lastResponseAt`, and `responseCount`; legacy `firstSeenAt`/`lastSeenAt`/`observationCount` describe retrieval history, and `currentlyObserved` means a retained direct confirmation, not continuous online status. Inventory CSV includes retrieval/source/response times and responding addresses.
+
+Reset clears observations, history, overrides, layout, interface policies, schedules, and notifications. It retains the disclosed local recovery backup and does not modify OS caches or external source files. Active scans block reset, and requests admitted against a replaced database are rejected with `409`. After reset, state and history stay empty until an explicit collection or import.
 
 ## Example
 

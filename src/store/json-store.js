@@ -24,9 +24,11 @@ export class JsonStore {
     try {
       await this.fileSystem.readFile(this.statePath, "utf8");
       await this.fileSystem.chmod(this.statePath, 0o600);
+      return false;
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
       await this.#write(freshState());
+      return true;
     }
   }
 

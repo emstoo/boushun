@@ -28,8 +28,8 @@ export async function collectLinux(options = {}) {
     settings = {},
   } = options;
 
-  if (!new Set(["passive", "standard", "deep"]).has(profile)) {
-    throw new Error("profile must be passive, standard, or deep");
+  if (!new Set(["local", "passive", "standard", "deep"]).has(profile)) {
+    throw new Error("profile must be local, passive, standard, or deep");
   }
 
   const observedAt = now().toISOString();
@@ -40,19 +40,20 @@ export async function collectLinux(options = {}) {
   let routes = [];
   let neighbors = [];
 
-  onProgress({ phase: "local-facts", completed: 0, total: 3, message: "Reading local network facts" });
+  const localFactCount = profile === "local" ? 2 : 3;
+  onProgress({ phase: "local-facts", completed: 0, total: localFactCount, message: "Reading local network facts" });
   throwIfAborted(signal);
   const initialResults = await Promise.allSettled([
     runJson(runner, "ip", ["-json", "address", "show"], signal),
     runJson(runner, "ip", ["-json", "route", "show", "table", "main"], signal),
-    runJson(runner, "ip", ["-json", "neigh", "show"], signal),
+    ...(profile === "local" ? [] : [runJson(runner, "ip", ["-json", "neigh", "show"], signal)]),
   ]);
   throwIfAborted(signal);
-  onProgress({ phase: "local-facts", completed: 3, total: 3, message: "Local network facts collected" });
+  onProgress({ phase: "local-facts", completed: localFactCount, total: localFactCount, message: "Local network facts collected" });
 
   addresses = settledValue(initialResults[0], warnings, "Unable to read interface information", []);
   routes = settledValue(initialResults[1], warnings, "Unable to read routing information", []);
-  neighbors = settledValue(initialResults[2], warnings, "Unable to read the neighbor cache", []);
+  neighbors = profile === "local" ? [] : settledValue(initialResults[2], warnings, "Unable to read the neighbor cache", []);
 
   const interfaces = parseInterfaces(addresses, evidence);
   const parsedRoutes = parseRoutes(routes, evidence);
@@ -74,6 +75,7 @@ export async function collectLinux(options = {}) {
       onProgress,
       evidence,
       observedAt,
+      now,
     });
     const responsive = probes.filter((probe) => probe.result === "response").map((probe) => probe.address);
     scan = {
@@ -91,8 +93,9 @@ export async function collectLinux(options = {}) {
     }
   }
 
-  const resolver = await readResolverConfig(textReader, warnings);
-  const leaseResult = await readDhcpLeases(textReader, dhcpLeasePaths.length ? dhcpLeasePaths : DEFAULT_DHCP_LEASE_PATHS);
+  const resolver = profile === "local" ? [] : await readResolverConfig(textReader, warnings);
+  const leaseResult = profile === "local" ? { leases: [], readablePaths: [] }
+    : await readDhcpLeases(textReader, dhcpLeasePaths.length ? dhcpLeasePaths : DEFAULT_DHCP_LEASE_PATHS);
   const leases = leaseResult.leases;
   const dhcpDiscovery = leases.map((lease) => {
     const record = evidence.add(
@@ -246,7 +249,7 @@ export function chooseDefaultScanCIDR(interfaces, settings = {}) {
   return candidates[0]?.canonical ?? null;
 }
 
-async function pingSweep(targets, { runner, concurrency, signal, onProgress, evidence, observedAt }) {
+async function pingSweep(targets, { runner, concurrency, signal, onProgress, evidence, now }) {
   const probes = [];
   let cursor = 0;
   let completed = 0;
@@ -268,16 +271,21 @@ async function pingSweep(targets, { runner, concurrency, signal, onProgress, evi
         result = "response";
       } catch (error) {
         if (signal?.aborted || error?.name === "AbortError") throw abortError();
+        if (error.code !== 1) throw new Error(`ICMP probe failed (${typeof error.code === "string" ? error.code : "execution error"})`);
         // A timeout is an expected negative result, not an application error.
       }
       const latencyMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
+      const observedAt = now().toISOString();
       const record = evidence.add(
         `probe-${result}`,
         "icmp-echo",
         result === "response" ? `${target} responded to ICMP echo` : `${target} did not respond to ICMP echo`,
         { address: target, result, latencyMs, observedAt },
       );
-      probes.push({ address: target, result, latencyMs, evidenceId: record.id });
+      record.observedAt = observedAt;
+      record.retrievedAt = observedAt;
+      record.sourceObservedAt = observedAt;
+      probes.push({ address: target, result, latencyMs, observedAt, evidenceId: record.id });
       completed += 1;
       onProgress({ phase: "icmp", completed, total: targets.length, message: `${completed}/${targets.length} addresses` });
     }
@@ -522,7 +530,8 @@ function createEvidenceFactory(observedAt) {
         .update(`${observedAt}\0${type}\0${source}\0${summary}\0${JSON.stringify(raw)}`)
         .digest("hex")
         .slice(0, 16);
-      const item = { id: `evidence:${digest}`, type, source, observedAt, summary, raw };
+      const item = { id: `evidence:${digest}`, type, source, observedAt, retrievedAt: observedAt,
+        sourceObservedAt: ["neighbor-cache", "dhcp-lease"].includes(type) ? null : observedAt, summary, raw };
       items.push(item);
       return item;
     },

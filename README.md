@@ -44,11 +44,13 @@ docker compose ps
 
 Open <http://127.0.0.1:4177>. Follow logs with `docker compose logs --follow`. Stop the application with `docker compose down`; the `boushun-data` volume is retained. Export the database from the Database screen before intentionally deleting that volume with `docker compose down --volumes`.
 
+Choose **Load local configuration** to show the probe and eligible scan ranges, then explicitly start the desired network or service check. **Refresh source records** in Sources retrieves reference data; cached devices remain in the collapsed unconfirmed-candidate list. Responses retain their own address, method, and time. Reset stays empty after a reload or container restart and retains a disclosed recovery backup.
+
 The image runs as a non-root user with a read-only root filesystem. Compose grants only `NET_RAW` for ICMP probes and mounts `/data` as the writable database volume. Docker Desktop is not a supported live-probe environment because Boushun requires direct visibility of the Linux host network stack.
 
 ### Local Node.js development
 
-Requirements are Linux, a supported Node.js 22, 24, or 26 release, `ip`, and `ping`. Kubernetes integration uses the client library with the standard kubeconfig search path outside a cluster or the mounted ServiceAccount inside a cluster; it does not shell out to `kubectl`. Startup collection is passive.
+Requirements are Linux, a supported Node.js 22, 24, or 26 release, `ip`, and `ping`. Kubernetes integration uses the client library with the standard kubeconfig search path outside a cluster or the mounted ServiceAccount inside a cluster; it does not shell out to `kubectl`. Startup preserves stored state without collecting.
 
 ```console
 cd boushun

@@ -1,3 +1,5 @@
+import { observationChecks, currentResponses } from "./observation.js";
+
 const BASE_SOURCE_IDS = new Set([
   "local-network",
   "dns-config",
@@ -25,16 +27,24 @@ export function composeCurrentSnapshot(snapshots = []) {
     || snapshot.sources?.some((source) => ["mdns", "ssdp", "snmpv3"].includes(source.id) && source.status !== "not-run"));
   const tcp = findLatest(history, (snapshot) => snapshot.tcpServices?.method === "tcp-connect");
   const udp = findLatest(history, (snapshot) => snapshot.udpServices?.method === "udp-probe");
-  const selected = uniqueSnapshots([base, icmp, deep, tcp, udp]);
+  const facts = base.profile === "local" ? findLatest(history, (snapshot) => snapshot.profile !== "local") : base;
+  const checks = history.flatMap(observationChecks);
+  const responses = currentResponses(checks);
+  const responseSnapshotIds = new Set(responses.map((response) => response.snapshotId));
+  const respondingSnapshots = history.filter((snapshot) => responseSnapshotIds.has(snapshot.id));
+  const nodeSource = findLatest(history, (snapshot) => snapshot.kubernetes && snapshot.kubernetes.available !== false && snapshot.kubernetes.nodeStatus !== "unavailable");
+  const serviceSource = findLatest(history, (snapshot) => snapshot.kubernetes && snapshot.kubernetes.available !== false && snapshot.kubernetes.serviceStatus !== "unavailable");
+  const selectedIds = new Set([base, facts, icmp, deep, tcp, udp, nodeSource, serviceSource, ...respondingSnapshots].filter(Boolean).map((snapshot) => snapshot.id));
+  const selected = uniqueSnapshots(history.filter((snapshot) => selectedIds.has(snapshot.id)));
 
-  const devices = mergeDevices(base.devices ?? [], [icmp, deep].filter(Boolean).flatMap((snapshot) => snapshot.devices ?? []));
+  const devices = mergeDevices(stampedDevices(base), uniqueSnapshots([facts, icmp, deep, ...respondingSnapshots]).flatMap(stampedDevices));
   const discovery = {
     ...(base.discovery ?? {}),
-    dhcp: base.discovery?.dhcp ?? [],
+    dhcp: facts?.discovery?.dhcp ?? [],
     mdns: deep?.discovery?.mdns ?? [],
     ssdp: deep?.discovery?.ssdp ?? [],
   };
-  const sources = composeSources({ base, icmp, deep, tcp, udp });
+  const sources = composeSources({ base, facts, icmp, deep, tcp, udp });
   const evidence = uniqueById(selected.flatMap((snapshot) => snapshot.evidence ?? []));
   const explicitLinks = uniqueById([...(base.explicitLinks ?? []), ...(deep?.explicitLinks ?? [])]);
   const warnings = [...new Set(selected.flatMap((snapshot) => snapshot.warnings ?? []))];
@@ -44,11 +54,21 @@ export function composeCurrentSnapshot(snapshots = []) {
     profile: "current",
     sourceProfile: base.profile,
     devices,
+    resolver: facts?.resolver ?? [],
+    kubernetes: nodeSource || serviceSource ? {
+      ...(base.kubernetes ?? facts?.kubernetes),
+      nodes: nodeSource?.kubernetes.nodes ?? [],
+      services: serviceSource?.kubernetes.services ?? [],
+      nodeRetrievedAt: nodeSource?.kubernetes.retrievedAt ?? nodeSource?.observedAt ?? null,
+      serviceRetrievedAt: serviceSource?.kubernetes.retrievedAt ?? serviceSource?.observedAt ?? null,
+    } : null,
+    controller: base.controller ?? facts?.controller ?? null,
+    observationChecks: checks,
     discovery,
     scan: icmp?.scan ?? null,
     snmp: deep?.snmp ?? null,
-    tcpServices: tcp?.tcpServices ?? null,
-    udpServices: udp?.udpServices ?? null,
+    tcpServices: composeServiceResults(history, tcp, "tcpServices", "tcp-connect", responses),
+    udpServices: composeServiceResults(history, udp, "udpServices", "udp-probe", responses),
     evidence,
     explicitLinks,
     warnings,
@@ -72,8 +92,22 @@ export function composeCurrentSnapshot(snapshots = []) {
   };
 }
 
+function composeServiceResults(history, latest, field, method, responses) {
+  if (!latest) return null;
+  const snapshots = new Map(history.map((snapshot) => [snapshot.id, snapshot]));
+  const endpoints = responses.filter((response) => response.method === method).flatMap((response) => {
+    const owner = snapshots.get(response.snapshotId);
+    const result = owner?.[field];
+    const endpoint = result?.endpoints?.find((item) => item.address === response.address && item.port === response.port);
+    return endpoint ? [{ ...endpoint, observedAt: response.respondedAt, snapshotId: owner.id,
+      coverage: { cidr: result.cidr, ports: result.ports ?? [], observedAt: owner.observedAt } }] : [];
+  });
+  return { ...latest[field], endpoints };
+}
+
 function composeSources(owners) {
   const result = new Map();
+  addSources(result, owners.facts, (id) => BASE_SOURCE_IDS.has(id) && id !== "local-network");
   addSources(result, owners.base, (id) => BASE_SOURCE_IDS.has(id));
   addSources(result, owners.icmp, (id) => id === "icmp");
   addSources(result, owners.deep, (id) => ["mdns", "ssdp", "snmpv3"].includes(id));
@@ -85,7 +119,7 @@ function composeSources(owners) {
 function addSources(target, snapshot, accepts) {
   for (const source of snapshot?.sources ?? []) {
     if (!accepts(source.id)) continue;
-    target.set(source.id, { ...source, observedAt: snapshot.observedAt, snapshotId: snapshot.id });
+    target.set(source.id, { ...source, observedAt: source.observedAt ?? snapshot.observedAt, snapshotId: snapshot.id });
   }
 }
 
@@ -108,7 +142,10 @@ function composeSummary(summary, icmp, tcp, udp) {
 function mergeDevices(baseDevices, enrichmentDevices) {
   const devices = baseDevices.map(cloneDevice);
   for (const candidate of enrichmentDevices) {
+    // Local configuration belongs exclusively to the latest snapshot.
+    if (candidate.id === "device:self") continue;
     const current = findMatchingDevice(devices, candidate);
+    if (current?.id === "device:self") continue;
     if (!current) {
       devices.push(cloneDevice(candidate));
       continue;
@@ -139,6 +176,10 @@ function cloneDevice(device) {
     evidenceIds: [...(device.evidenceIds ?? [])],
     sourceKinds: [...(device.sourceKinds ?? [])],
   };
+}
+
+function stampedDevices(snapshot) {
+  return (snapshot.devices ?? []).map((device) => ({ ...device, retrievedAt: snapshot.observedAt }));
 }
 
 function confidenceRank(value) {

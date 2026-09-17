@@ -75,7 +75,10 @@ function udpCollect(input, parser) {
     socket.on("message", (message, remote) => {
       try {
         const item = parser(message, remote);
-        results.set(`${remote.address}:${JSON.stringify(item)}`, item);
+        item.responderAddress = remote.address;
+        const key = `${remote.address}:${JSON.stringify(item)}`;
+        item.observedAt = new Date().toISOString();
+        results.set(key, item);
       } catch {
         // Malformed multicast responses are ignored.
       }
@@ -138,9 +141,10 @@ function parseHttpHeaders(text) {
 }
 
 function evidenceRecord(item, type, observedAt, evidence) {
+  observedAt = item.observedAt ?? observedAt;
   const summary = `${item.address} responded over ${type.toUpperCase()}`;
   const digest = createHash("sha256").update(`${observedAt}\0${type}\0${JSON.stringify(item)}`).digest("hex").slice(0, 16);
-  const record = { id: `evidence:${digest}`, type: `${type}-announcement`, source: type, observedAt, summary, raw: item };
+  const record = { id: `evidence:${digest}`, type: `${type}-announcement`, source: type, observedAt, retrievedAt: observedAt, sourceObservedAt: item.observedAt ?? null, summary, raw: item };
   evidence.push(record);
   return { ...item, evidenceIds: [record.id] };
 }

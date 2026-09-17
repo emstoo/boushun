@@ -173,6 +173,7 @@ async function startServer(t, options = {}) {
     dataDirectory: directory,
     startScheduler: false,
     collector: options.collector ?? (async () => collectDemo()),
+    demo: true,
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(async () => {

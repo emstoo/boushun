@@ -54,6 +54,11 @@ export async function collectKubernetes(options = {}) {
       roles: rolesForNode(item),
       osImage: item.status?.nodeInfo?.osImage ?? null,
       architecture: item.status?.nodeInfo?.architecture ?? null,
+      conditions: (item.status?.conditions ?? []).map((condition) => ({
+        type: condition.type, status: condition.status,
+        lastHeartbeatTime: condition.lastHeartbeatTime ?? null,
+        lastTransitionTime: condition.lastTransitionTime ?? null,
+      })),
       evidenceIds: [record.id],
     };
   });
@@ -93,6 +98,8 @@ export async function collectKubernetes(options = {}) {
   const status = results.every((result) => result.status === "fulfilled") ? "connected" : "degraded";
   return {
     available: true,
+    nodeStatus: results[0].status === "fulfilled" ? "connected" : "unavailable",
+    serviceStatus: results[1].status === "fulfilled" ? "connected" : "unavailable",
     nodes,
     services,
     evidence,

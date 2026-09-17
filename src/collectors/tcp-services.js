@@ -95,6 +95,7 @@ export async function collectTcpServices(options = {}) {
 
   const attempts = targets.flatMap((address) => normalizedPorts.map((port) => ({ address, port })));
   const endpoints = [];
+  const responseTimes = new WeakMap();
   const outcomeCounts = { open: 0, closed: 0, "filtered-or-unreachable": 0, unreachable: 0, error: 0 };
   let cursor = 0;
   let completed = 0;
@@ -110,13 +111,17 @@ export async function collectTcpServices(options = {}) {
       throwIfAborted(signal);
       const state = outcomeCounts[result.state] === undefined ? "error" : result.state;
       outcomeCounts[state] += 1;
-      if (state === "open") endpoints.push({
-        address: attempt.address,
-        port: attempt.port,
-        protocol: "tcp",
-        service: serviceName(attempt.port),
-        latencyMs: result.latencyMs ?? null,
-      });
+      if (state === "open") {
+        const endpoint = {
+          address: attempt.address,
+          port: attempt.port,
+          protocol: "tcp",
+          service: serviceName(attempt.port),
+          latencyMs: result.latencyMs ?? null,
+        };
+        responseTimes.set(endpoint, (options.now?.() ?? new Date()).toISOString());
+        endpoints.push(endpoint);
+      }
       completed += 1;
       onProgress({ phase: "tcp-services", completed, total: attempts.length, message: `${completed}/${attempts.length} connections · ${endpoints.length} open`, metrics: { openCount: endpoints.length } });
     }
@@ -125,7 +130,7 @@ export async function collectTcpServices(options = {}) {
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
   endpoints.sort((a, b) => compareAddress(a.address, b.address) || a.port - b.port);
-  const evidence = endpoints.map((endpoint) => evidenceRecord(observedAt, "tcp-service-open", `${endpoint.address}:${endpoint.port}/tcp accepted a connection`, endpoint));
+  const evidence = endpoints.map((endpoint) => evidenceRecord(responseTimes.get(endpoint), "tcp-service-open", `${endpoint.address}:${endpoint.port}/tcp accepted a connection`, endpoint));
   endpoints.forEach((endpoint, index) => { endpoint.evidenceIds = [evidence[index].id]; });
   const summaryEvidence = evidenceRecord(observedAt, "tcp-service-scan", `Checked ${attemptCount} TCP endpoints and found ${endpoints.length} open`, {
     cidr: safeCIDR.canonical,
@@ -198,7 +203,7 @@ function stateForError(error) {
 
 function evidenceRecord(observedAt, type, summary, raw) {
   const digest = createHash("sha256").update(`${observedAt}\0${type}\0${summary}\0${JSON.stringify(raw)}`).digest("hex").slice(0, 16);
-  return { id: `evidence:${digest}`, type, source: "tcp-connect", observedAt, summary, raw };
+  return { id: `evidence:${digest}`, type, source: "tcp-connect", observedAt, retrievedAt: observedAt, sourceObservedAt: observedAt, summary, raw };
 }
 
 function kubernetesNodePorts(snapshot) {

@@ -4,6 +4,37 @@ import { collectDemo } from "../src/collectors/demo.js";
 import { buildInventory } from "../src/domain/inventory.js";
 import { buildTopology, diffSnapshots } from "../src/topology/build-topology.js";
 
+test("[INV-20, OBS-03] Kubernetes adds missing node addresses to an existing identity without confirming responses", () => {
+  const snapshot = {
+    id: "synthetic-node-addresses", observedAt: "2026-09-17T01:00:00.000Z", profile: "passive", interfaces: [],
+    devices: [{ id: "device:existing", addresses: ["192.168.50.2"], mac: "02:00:00:00:00:02",
+      source: "neighbor-cache", state: "STALE", evidenceIds: ["evidence:neighbor"] }],
+    evidence: [{ id: "evidence:neighbor", type: "neighbor-cache" }, { id: "evidence:node", type: "kubernetes-node" }],
+    kubernetes: { available: true, nodes: [{ name: "node.test", addresses: ["192.168.50.2", "192.168.50.3", "192.168.50.3"],
+      roles: ["worker"], conditions: [{ type: "Ready", status: "True" }], evidenceIds: ["evidence:node"] }], services: [] },
+  };
+  const original = structuredClone(snapshot);
+  const inventory = buildInventory(snapshot);
+  assert.equal(inventory.devices.length, 1);
+  const device = inventory.devices[0];
+  assert.equal(device.id, "device:existing");
+  assert.equal(device.name, "node.test");
+  assert.equal(device.role, "kubernetes-node");
+  assert.deepEqual(inventory.ipAssignments.map((item) => item.address).sort(), ["192.168.50.2", "192.168.50.3"]);
+  for (const assignment of inventory.ipAssignments) {
+    assert.equal(assignment.deviceId, device.id);
+    assert.ok(device.ipAssignmentIds.includes(assignment.id));
+    assert.equal(assignment.observation.kind, "registered");
+    assert.equal(assignment.observation.lastResponseAt, null);
+  }
+  assert.ok(inventory.ipAssignments.find((item) => item.address === "192.168.50.3").evidenceIds.includes("evidence:node"));
+  assert.equal(device.observation.kind, "registered");
+  assert.equal(device.observation.lastResponseAt, null);
+  assert.deepEqual(device.reportedConditions, snapshot.kubernetes.nodes[0].conditions);
+  assert.deepEqual(buildInventory(snapshot), inventory);
+  assert.deepEqual(snapshot, original);
+});
+
 test("[INV-10, INV-11] Kubernetes LoadBalancer address becomes a VIP rather than a node address", () => {
   const snapshot = collectDemo(() => new Date("2026-08-21T08:00:00Z"));
   snapshot.devices.find((device) => device.id === "device:router").addresses.push("192.168.50.99");
@@ -54,7 +85,7 @@ test("[INV-08] a TCP response creates a service and an inferred device even with
   const inventory = buildInventory(snapshot);
   const device = inventory.devices.find((item) => item.id === "device:ip:192.168.50.222");
   const service = inventory.services.find((item) => item.id === "service:tcp:192.168.50.222:8080");
-  assert.equal(device.status, "online");
+  assert.equal(device.status, "responded");
   assert.equal(device.sourceKinds.includes("tcp-connect"), true);
   assert.equal(service.kind, "tcp-service");
   const topology = buildTopology({ ...snapshot, inventory }, { view: "services" });

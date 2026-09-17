@@ -39,7 +39,7 @@ test("[UI-01, UI-02] synthetic demo exposes every primary screen", async ({ page
 
 test("[UI-08, UI-09, UI-10, UI-12] topology legend, viewport, details, and address actions work", async ({ page }) => {
   await openDemo(page);
-  await expect(page.getByRole("complementary", { name: "Node status legend" })).toContainText("Online");
+  await expect(page.getByRole("complementary", { name: "Node status legend" })).toContainText("Responded");
   await expect(page.locator(".graph-node")).toHaveCount(9);
   const nodeTitleClearances = await page.locator(".graph-node").evaluateAll((nodes) => nodes.map((node) => {
     const card = node.querySelector(".node-card").getBBox();
@@ -102,12 +102,21 @@ test("[UI-01, UI-03, UI-15] database reset exposes and recovers through the empt
   await expect(page.getByRole("button", { name: "Import database" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Reset database" })).toBeEnabled();
 
-  const reset = await page.request.post(`${demo.baseURL}/api/database/reset`, { data: { confirmation: "RESET" } });
-  expect(reset.ok()).toBe(true);
-  await page.reload();
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toMatch(/backup/i);
+    expect(dialog.message()).toMatch(/schedule/i);
+    await dialog.accept("RESET");
+  });
+  await page.getByRole("button", { name: "Reset database" }).click();
   await expect(page.locator("#database-empty-status")).toBeVisible();
+  await expect(page.locator(".graph-node")).toHaveCount(0);
+  await expect(page.locator("#detail-drawer")).toBeHidden();
   await expect(page.locator("#open-scan-dialog")).toBeDisabled();
   await page.locator("#database-collect-facts").click();
   await expect(page.locator("#database-empty-status")).toBeHidden();
   await expect(page.locator("#open-scan-dialog")).toBeEnabled();
+  await expect(page.locator("#toast")).toContainText("Device confirmation has not been performed");
+  const current = await (await page.request.get(`${demo.baseURL}/api/state`)).json();
+  expect(current.inventory.devices.map((device) => device.id)).toEqual(["device:self"]);
+  await expect(page.locator("#last-seen")).not.toContainText("Observed");
 });

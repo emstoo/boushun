@@ -59,6 +59,8 @@ Only explicitly listed targets are contacted. Each session is closed after its b
 
 Vendor bridge scripts can periodically produce read-only JSON for Boushun while keeping controller credentials in the bridge environment:
 
+An optional top-level `observedAt` ISO timestamp records when the bridge observed the source data. Missing, invalid, or future timestamps are treated as unknown. Reading the file again updates retrieval time only; even a reported `UP` state remains candidate evidence rather than a direct response. Unchanged content retains its evidence identity.
+
 ```json
 {
   "devices": [{ "id": "device:ap-1", "name": "AP", "mac": "00:11:22:33:44:55", "addresses": ["192.168.50.20"], "role": "access-point" }],

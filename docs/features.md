@@ -4,14 +4,16 @@ Boushun 0.1.0 provides:
 
 - A v2 inventory with separate Device, Interface, IP assignment, VIP, Network, and Service entities.
 - A source-composed Current state: a later passive, TCP, or UDP run replaces only that source's observation instead of erasing other valid results; historical detail and comparison use the same as-of semantics.
-- Passive Linux facts from `iproute2`, resolver configuration, DHCP leases, Kubernetes Nodes and Services, optional controller exports, and a local IEEE OUI CSV.
+- Explicit local configuration loading from interfaces and routes, followed by separate Passive source refresh or authorized active checks. Live startup preserves the database without collecting.
+- Passive source records from the neighbor cache, resolver configuration, DHCP leases, Kubernetes Nodes and Services, optional controller exports, and a local IEEE OUI CSV.
+- Cache/export-only devices in a collapsed unconfirmed-candidate list, excluded from default topology. Configured local objects, API-registered resources, and direct responses have distinct status labels.
 - Bounded Standard discovery with one ICMP echo attempt per address and per-target positive/negative evidence.
 - Deep discovery with mDNS, SSDP, and read-only SNMPv3 collection of system, IF-MIB, LLDP-MIB, and BRIDGE-MIB/FDB data.
 - Physical, Logical, and Services map views with confidence and layer filtering.
 - Evidence-only Physical links with a separate unplaced-device tray, and an external-path-first Services view with ClusterIP-only services collapsed.
 - View-specific automatic layouts and independently pinned positions for Physical, Logical, and Services views.
 - Collector health, per-interface map/identity/scan controls, aggregated evidence, and arbitrary snapshot comparison.
-- First-seen, last-seen, and observation counts for device identities.
+- Separate retrieval, source observation, and direct response times. Confirmation belongs to an address and method; rereading cached data does not renew it. Result views describe the last completed checks, not continuous online status.
 - Identity review for suspicious shared-MAC/many-address groupings, conflicted confidence, non-destructive naming suggestions, and an audited recommended split action.
 - Independent TCP service discovery across every usable IP in a selected range, with LAN, web, Kubernetes, and custom-only presets plus per-run custom ports.
 - Independent, rate-limited UDP service discovery with safe common, IoT, and custom-only presets, protocol-aware probes, one timeout retry, and explicit `open-or-filtered` results.
@@ -26,7 +28,7 @@ Boushun 0.1.0 provides:
 - A sticky global scan status showing scan type, target, phase, completed/total checks, discoveries, elapsed time, percentage, and cancellation from every screen.
 - Manual device name, role, tags, merge, and IP split projections with an audit trail.
 - Semantic diffs for device identity, IP assignment, services, and links; ARP state-only churn is ignored.
-- Full database export, validated import preview, and confirmed reset with automatic rolling pre-change backups.
+- Full database export, validated import preview, and confirmed reset with automatic rolling pre-change backups. Reset remains empty after reload or restart, including the local demo; local configuration loading restores only the probe and eligible ranges.
 - Zoom, pan, viewport reset, node pinning, search, JSON/SVG export, and atomic local storage.
 
 ## Static read-only demo

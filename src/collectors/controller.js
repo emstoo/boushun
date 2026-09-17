@@ -15,8 +15,10 @@ export async function collectControllerSnapshots(paths, observedAt) {
     try {
       const document = JSON.parse(await readFile(filePath, "utf8"));
       const normalized = normalizeControllerDocument(document, filePath, warnings);
-      const digest = createHash("sha256").update(`${observedAt}\0${filePath}\0${JSON.stringify(normalized)}`).digest("hex").slice(0, 16);
-      const record = { id: `evidence:${digest}`, type: "controller-export", source: filePath, observedAt, summary: `Read a controller topology export from ${filePath}`, raw: normalized };
+      const sourceTime = Date.parse(document.observedAt);
+      const sourceObservedAt = Number.isFinite(sourceTime) && sourceTime <= Date.parse(observedAt) ? new Date(sourceTime).toISOString() : null;
+      const digest = createHash("sha256").update(`${sourceObservedAt}\0${filePath}\0${JSON.stringify(normalized)}`).digest("hex").slice(0, 16);
+      const record = { id: `evidence:${digest}`, type: "controller-export", source: filePath, observedAt: sourceObservedAt, retrievedAt: observedAt, sourceObservedAt, summary: `Read a saved controller export; device responses are unconfirmed`, raw: normalized };
       evidence.push(record);
       devices.push(...normalized.devices.map((item) => ({ ...item, evidenceIds: [...new Set([...(item.evidenceIds ?? []), record.id])] })));
       links.push(...normalized.links.map((item, index) => ({ ...item, id: item.id ?? `link:controller:${digest}:${index}`, evidenceIds: [...new Set([...(item.evidenceIds ?? []), record.id])] })));

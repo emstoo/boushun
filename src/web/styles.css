@@ -238,6 +238,13 @@ h2, h3, p { overflow-wrap: anywhere; }
 .node-status.recent { fill: var(--status-recent); }
 .node-status.offline { fill: var(--status-offline); }
 .node-status.unknown { fill: var(--status-unknown); }
+.node-status.responded { fill: var(--status-online); }
+.node-status.registered { fill: var(--status-recent); }
+.node-status.configured { fill: var(--status-offline); }
+.node-status.unconfirmed { fill: var(--status-unknown); }
+#candidate-inventory { margin: 18px; }
+#candidate-inventory summary { cursor: pointer; padding: 12px; }
+#candidate-inventory p { color: var(--muted); padding: 0 12px; }
 .dimmed { opacity: .13; }
 
 .detail-drawer { position: absolute; top: 12px; right: 12px; width: min(335px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; border: 1px solid var(--border-strong); border-radius: 14px; padding: 19px; background: rgba(9,22,18,.96); box-shadow: 0 24px 80px rgba(0,0,0,.5); backdrop-filter: blur(22px); z-index: 4; }

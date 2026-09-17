@@ -74,6 +74,12 @@ P0 behavior must be covered beyond unit level at the applicable API integration 
 
 Do not use real credentials in test SNMP configuration or kubeconfig files. Secret non-disclosure tests may place a harmless identifying marker only in a protected fixture. The oracle is that the marker never appears in an API body, snapshot, evidence record, warning, error, or log.
 
+### Reset and observation datasets
+
+Use only synthetic addresses within `192.168.50.0/24`, locally administered MACs, and `.test` names. Control collection and response clocks independently: an old source observation precedes reset, local loading follows reset, and later response and retrieval times differ. No test reads the host neighbor cache, credentials, mounted API configuration, or actual LAN. File tests use an isolated temporary store. API tests bind loopback. Browser tests drive the real UI against a synthetic server.
+
+Fixtures include an unchanged STALE neighbor, REACHABLE/PERMANENT/NOARP entries, a DHCP lease, a saved controller export with and without source time, a Kubernetes registered node, a direct ICMP response without a neighbor entry, an ICMP timeout, TCP/UDP endpoints, and two addresses sharing one identity. Existing synthetic demo topology remains representative by supplying explicit synthetic response evidence.
+
 ### Network test isolation
 
 - Unit and component tests replace connectors, probers, runners, APIs, and sessions. Observe destination, count, ordering, timeout, abort, and close behavior at those boundaries. Container CI additionally exercises real collection in a disconnected synthetic network namespace.
@@ -101,11 +107,11 @@ Do not use real credentials in test SNMP configuration or kubeconfig files. Secr
 
 | ID | Priority | Condition or action | Expected result |
 |---|---:|---|---|
-| COL-01 | P0 | Start the application or run a Passive scan | Read `ip address/route/neigh`, resolver, leases, and optional APIs without starting active ICMP, port scanning, multicast discovery, or SNMP |
+| COL-01 | P0 | Start the application, load local configuration, or explicitly refresh Passive sources | Startup preserves stored state without network collection (a new synthetic demo may be seeded once). Local configuration reads interfaces/routes only. Passive source refresh may read neighbor cache, resolver, leases, and configured APIs, but starts no active probes. See [reset and observation acceptance](#513-reset-and-observation-acceptance) |
 | COL-02 | P1 | One of address/route/neighbor collection fails | Preserve successful data, report degraded source health, and emit no secret-bearing warning |
 | COL-03 | P1 | All local commands fail | Avoid an unnecessary collector crash and return diagnosable unavailable health/warnings |
 | COL-04 | P1 | Supply valid interface, route, and neighbor JSON | Interface, network, gateway, device, and evidence references remain consistent |
-| COL-05 | P1 | Supply FAILED/INCOMPLETE neighbors and each relevant NUD state | Failed neighbors are omitted; remaining states map correctly to online/recent/offline/unknown |
+| COL-05 | P0 | Supply FAILED/INCOMPLETE neighbors and each relevant NUD state | Failed neighbors are omitted; retained cache entries are candidates, never direct response confirmation. Preserve the reported NUD state separately |
 | COL-06 | P1 | Supply dnsmasq, ISC, and JSON/Kea lease formats | Normalize address, MAC, hostname, expiry, and source; isolate malformed documents as empty results |
 | COL-07 | P1 | DHCP and reverse-DNS names conflict | Preserve the DHCP name and perform bounded reverse lookup only for unresolved addresses |
 | COL-08 | P0 | Run a Standard scan | Send one ICMP attempt to each target except local/network/broadcast addresses and retain both positive and negative evidence |
@@ -170,7 +176,7 @@ Do not use real credentials in test SNMP configuration or kubeconfig files. Secr
 | ID | Priority | Condition or action | Expected result |
 |---|---:|---|---|
 | INV-01 | P0 | No snapshot exists | Return empty inventory/topology without crashing the API or UI |
-| INV-02 | P0 | Add Passive, ICMP, Deep, TCP, and UDP snapshots in different orders | Preserve the latest observation per source; a new scan of one kind never erases another kind |
+| INV-02 | P0 | Add local configuration, Passive, ICMP, Deep, TCP, and UDP snapshots in different orders | Preserve source-specific results with their original times. A successful comparable check replaces its own scope, including lost confirmation; unrelated workflows do not renew confirmation. Failures/cancellation do not replace successful results |
 | INV-03 | P1 | Observe one device again by ID, MAC, or address | Merge addresses/evidence/sources without duplicates and retain the higher identity confidence |
 | INV-04 | P0 | Build Current state | Do not mutate raw snapshots; composition records each source snapshot and timestamp |
 | INV-05 | P1 | A scanner has synthetic and real interfaces | Replace the synthetic interface with real interfaces/addresses and omit loopback from the map |
@@ -186,6 +192,9 @@ Do not use real credentials in test SNMP configuration or kubeconfig files. Secr
 | INV-15 | P1 | Merge 2 to 20 devices | Move device, interface, assignment, and advertiser references consistently to the target |
 | INV-16 | P1 | Apply a manual or recommended split | Move only selected addresses to the new device/interface and keep source/audit state consistent |
 | INV-17 | P1 | Submit an invalid merge/split or request an unavailable recommendation | Reject without changing state or audit records |
+| INV-18 | P0 | Local refresh changes the probe IP from `192.168.50.10` to `.20` after earlier active observations | Current self configuration contains only `.20` and the latest interfaces/routes/ranges. Other devices retain their response evidence; historical self configuration and raw snapshots remain unchanged |
+| INV-19 | P1 | Load local configuration after DNS/DHCP records, then explicitly refresh Passive sources | Local loading retains DNS/DHCP data together with their original source status, snapshot ID, and time. The next Passive update replaces both data and source provenance, including a successful empty result |
+| INV-20 | P1 | Kubernetes reports a Node with known `.2` and missing `.3` addresses, including duplicates | Add the missing address to the existing device with API evidence, without duplicate identities/assignments or mutating raw snapshots. Both addresses remain registered without a direct response time |
 
 ### 5.7 Topology, diffs, history, and layout
 
@@ -201,7 +210,7 @@ Do not use real credentials in test SNMP configuration or kubeconfig files. Secr
 | TOP-08 | P0 | Select a TCP/UDP comparison baseline | Use only an earlier scan with the same protocol, CIDR, and port set; when none exists, mark the observation as a baseline with no added or removed endpoints |
 | TOP-09 | P0 | A formerly confirmed UDP endpoint is now uncertain | Report lost confirmation/uncertain, never confirmed closed |
 | TOP-10 | P1 | Compare arbitrary from/to snapshots | Compose each side as of its selected point and return not-found for missing IDs |
-| TOP-11 | P1 | Calculate presence over all history | first seen, last seen, observation count, and currently observed match the timeline |
+| TOP-11 | P0 | Calculate presence over all history | Distinguish retrieval, source observation, and direct response times. Re-reading cached records never advances response time or response count. Historical projections use only evidence available at the selected point |
 | TOP-12 | P1 | Compute automatic layout for all three views | Follow view-specific ranks/connections and give every node finite coordinates |
 | TOP-13 | P1 | Load view-specific and legacy pins | Prefer view-specific pins and preserve independent positions after reload |
 | TOP-14 | P1 | Save fractional, negative, over-20000, NaN, or invalid-ID positions | Keep only valid positions, round them, and clamp them to the supported range |
@@ -244,7 +253,7 @@ Do not use real credentials in test SNMP configuration or kubeconfig files. Secr
 | DB-11 | P0 | Import or reset successfully | Write a complete 0600 pre-change backup, then replace state atomically |
 | DB-12 | P0 | Inject a filesystem failure during backup or primary write | Keep existing state readable and do not report success |
 | DB-13 | P1 | Repeat imports/resets | Create operation-specific backups and retain only the latest five |
-| DB-14 | P1 | Reset the database | Clear Boushun state only; preserve OUI, kubeconfig, controller, and SNMP source files |
+| DB-14 | P0 | Reset the database, reload, and restart | Clear observations, history, overrides, layout, DB settings, schedules, and notifications. Keep the DB empty through reload/restart; stale jobs and browser responses cannot restore pre-reset state. Preserve external inputs and retain the disclosed recovery backup |
 | DB-15 | P1 | Read excess audit, notification, and schedule entries | Normalize to the supported limits and isolate invalid entries |
 
 ### 5.10 HTTP API, exports, and security
@@ -309,6 +318,47 @@ The HTTP endpoint and response-header requirements here apply to the local Boush
 | DEP-08 | P0 | Generate and publish `dist/demo/` | Build from synthetic projected API responses only; emit static assets/fixtures with no live collector or server dependency, preserve subpath hosting, and never require relaxing loopback/Host/Origin protections in the production server |
 | DEP-09 | P1 | Run the smoke against the published project URL | Require a successful document and synthetic fixture, visible topology, disabled scan controls, and a JSON download matching the loaded snapshot; fail within bounded deadlines without retry or automatic rollback |
 
+### 5.13 Reset and observation acceptance
+
+Reset starts an empty observation history. Loading local configuration restores only the probe and configured network ranges. Cache entries and saved exports are candidates, hidden from default topology and listed separately on demand. Configured APIs describe declared resources; they do not prove endpoint reachability. Direct responses describe a particular address, method, and time, never continuous online status or physical connectivity.
+
+Keep retrieval time, source observation time, and last direct response time distinct. Unknown source time stays unknown. Re-reading an unchanged file or cache must not make its contents newly confirmed. Identity confidence and link confidence remain independent of response confirmation.
+
+The result view represents the last completed check for each scope and method, with its time. Rechecking the same scope replaces its response set. A timeout means unconfirmed; a failed or cancelled operation retains the previous successful result with a visible failure/cancellation notice. An unrelated source refresh does not renew response times. Results from other scopes and methods retain their own provenance.
+
+| ID | Priority | Action and oracle | Boundary |
+|---|---|---|---|
+| RST-01 | P0 | Start live mode with a new store. No collector/API/probe is invoked and state/history/topologies are empty | API |
+| RST-02 | P0 | Reset populated state with the exact confirmation. Observations, history, overrides, layout, interface policies, schedules, and notifications are empty; a complete recovery backup exists. External source files are unchanged | Store/API |
+| RST-03 | P0 | Reopen the same reset store, including demo mode. No implicit collection or demo reseeding occurs; state remains empty. A genuinely new demo store may be seeded once | API |
+| RST-04 | P0 | An active job blocks reset; a job request waiting on a state read cannot start/save with pre-reset settings after reset succeeds. A failed backup/write preserves prior state | API fault injection; DB-10/DB-12 |
+| RST-05 | P0 | Click Reset in the browser, inspect the prompt for deletion scope and retained backup, enter RESET, and verify empty graph/history/details without reloading. Release a pre-reset delayed response; it must not restore old UI state | Browser |
+| LOC-01 | P0 | Load local configuration with cached neighbors and configured APIs available. Only interface/route reads occur; no neighbor/lease/controller/API read, DNS lookup, or probe. Snapshot contains only local facts and permitted scan ranges | Collector/API |
+| LOC-02 | P1 | Use the empty-state action. Show the probe and configured networks only, enable eligible scan actions, and say configuration loaded with device confirmation not performed | Browser |
+| OBS-01 | P0 | Refresh identical cache entries repeatedly, including each retained NUD state. Retain candidates and raw state; no online/recent claim or response time. Default topology and confirmed count exclude them | Inventory/API/browser |
+| OBS-02 | P0 | Read an unchanged controller file at different times. Retrieval time changes; source time and stable evidence identity do not. Missing/invalid/future source times do not become direct response times; state=UP does not confirm reachability | Collector |
+| OBS-03 | P0 | Fetch registered Kubernetes resources, including Ready/Unknown. Preserve API-reported state separately. API success never sets a direct response time; API failure does not mark devices offline | Inventory/API |
+| OBS-04 | P0 | Receive an ICMP response after reset, with no matching neighbor. Create an address-scoped confirmed result with the actual response time and evidence. A cached second address sharing its MAC receives no confirmation | Collector/inventory |
+| OBS-05 | P0 | Repeat the same completed ICMP check and receive no response. Previous response disappears from that check's current response set, remains in history, and is not labeled offline. A Passive refresh must not resurrect it | Composition/API |
+| OBS-06 | P0 | Run a different scope or method and refresh local/Passive sources. Preserve unrelated completed results with original response times. Never attach a new collection time to an older response | Composition |
+| OBS-07 | P0 | Inject a probe execution error, source failure, or cancellation. Distinguish error from timeout; do not replace successful confirmation with a partial/failed result. Surface a failure or partial-source notice | Collector/API/browser; COL-09/COL-10/JOB-03 |
+| OBS-08 | P0 | Confirm a TCP/UDP endpoint or obtain only an uncertain UDP outcome. Confirmation applies to the responding address/port/method only; uncertain outcomes do not create confirmed devices/services | Inventory/API; TCP/UDP suites |
+| OBS-09 | P0 | Read an SNMP FDB/LLDP record. A responding SNMP target may be confirmed, but learned neighbors/links are not promoted to directly responding devices or confirmed physical connections | Inventory/topology; EXT-14 |
+| OBS-10 | P0 | Repeatedly retrieve cache/API/file data after a direct response. Presence separates first/last retrieval from first/last direct response and counts direct confirmations without counting repeated retrievals as responses | API |
+| OBS-11 | P1 | Inspect Current, history at a selected point, JSON/CSV exports, and device details. Status, response addresses, provenance, and timestamps agree; raw history is unchanged. No evidence from a future snapshot enters a historical view | API/browser |
+| OBS-12 | P1 | Inspect the result heading, legend, Sources, and completion messages. Show last check and its time; distinguish source fetch success, registered state, response, and unconfirmed candidates. Never claim continuous online status | Browser |
+| REG-01 | P0 | Run existing scope, port/range/pacing/concurrency, cancellation, security, and database failure suites | Existing automated suites |
+| REG-02 | P1 | Load live synthetic and static read-only demos. Representative topology, navigation, exports, read-only controls, and privacy checks continue to pass | Existing browser/static suites |
+| DEP-10 | P0 | In the disconnected synthetic Docker fixture, populate/reset/recreate the application and load local configuration. Persistent reset remains empty after recreation; local loading does not restore cached devices; a separately authorized isolated check can add a responding target | Container acceptance |
+
+#### Test coverage mapping
+
+- Collector and evidence behavior: Linux/network/controller collector component tests, plus observation contract tests.
+- Current projection, scoped confirmation, and topology: current-state/inventory/topology tests and observation contract tests.
+- Reset, restart, generation boundaries, presence, and exports: store and loopback server integration tests.
+- Real reset prompt, local recovery, candidate list, status wording, and stale response: browser acceptance against synthetic fixtures.
+- Docker persistence and real collector behavior: disconnected container acceptance. Unit mocks and a demo browser do not prove this boundary.
+
 ## 6. Cross-Cutting Invariants
 
 Every scenario should also verify these invariants where applicable:
@@ -346,13 +396,21 @@ After each injected failure, verify that the process remains responsive, `state.
 
 ## 8. Execution Order and Release Gates
 
+### Test baseline and change control
+
+Prepare the specification, executable tests, fixtures, and necessary changes to existing tests before production implementation. Freeze that baseline when implementation begins. Thereafter obtain explicit user approval before changing any test, expectation, fixture, helper, runner configuration, skip, or specification. Do not remove assertions or change expected results merely to make implementation pass. Report a baseline defect with its reason and coverage impact and continue independent implementation while approval is pending.
+
+Before implementation, record the frozen test files and expected failures of the new cases. Run the existing baseline to distinguish pre-existing failures from required behavioral changes. After implementation, run relevant component/API tests, the source/unit/integration check, and browser acceptance without changing the frozen tests. Container acceptance is required for the Docker-specific persistence claim; report it as unverified if the isolated container environment is unavailable.
+
+Any P0 failure blocks completion. Do not accept an unexplained timeout merely because a retry passes. Report commands actually executed, results, fixture provenance, any approved test changes, and boundaries not exercised. Do not reset or scan the user's live database/network as part of these tests.
+
 ### 8.1 Pre-merge CI and local acceptance
 
 The [CI workflow](../.github/workflows/ci.yml) runs three job groups; the Node.js group expands into the supported-version matrix:
 
 1. `npm run check` on Node.js 22.0.0 and the latest releases of the supported 22, 24, and 26 lines for syntax, unit, component, store, and loopback API tests. This includes a fixed-clock static-demo build test that captures projected synthetic API responses, verifies representative TCP/UDP and history data, checks shared-asset/runtime selection and export files, and asserts the read-only fixture contract. Runtime unit tests cover live JSON requests, layout persistence, static mutation rejection, shared fixture loading with independent response objects, request/body deadlines, invalid fixtures, and export targets.
 2. Browser acceptance first runs `npm run verify:screenshots` against the committed README images, before any regeneration can overwrite them. It then runs `npm run test:e2e` in Chromium against the fixed-clock synthetic server and generated static site. Static cases cover root and `/boushun/` hosting, primary navigation, render-time capability restrictions, fixture failures and reload recovery, JSON/CSV downloads, and no live `/api/*` requests or console/page errors during normal use. The shared smoke contract is exercised locally, including unavailable-fixture and mismatched-export cases, without contacting Pages. After acceptance, CI uploads the Pages preview image, runs `npm run screenshots`, and validates the regenerated images with `npm run verify:screenshots`. PNG checks cover structure, expected width, minimum height, and absence of textual metadata; exact bytes are not compared across operating systems because browser rendering and fonts vary by runner.
-3. `npm run test:container` builds the production image and validates the production Compose host-network configuration. Runtime checks share a disconnected synthetic fixture's network namespace: passive collection must discover its dummy interface, ICMP must succeed, and a TCP scan must find its service. The application retains its non-root user, read-only root filesystem, `NET_RAW`-only capability boundary, health check, persistent volume, and restricted temporary filesystem. Writes to the root filesystem and execution from `/tmp` must actually fail. Recreating the application container must preserve exported state and layout. Only the isolated fixture receives `NET_ADMIN` to create the dummy interface; neither container can reach the host LAN. The script ignores local overrides and `.env`, refuses an existing `boushun-ci` project or data volume, and removes its synthetic containers and volume on completion or test failure.
+3. `npm run test:container` builds the production image and validates the production Compose host-network configuration. Runtime checks share a disconnected synthetic fixture's network namespace: explicit local configuration loading must discover its dummy interface, ICMP must succeed, and a TCP scan must find its service. The application retains its non-root user, read-only root filesystem, `NET_RAW`-only capability boundary, health check, persistent volume, and restricted temporary filesystem. Writes to the root filesystem and execution from `/tmp` must actually fail. Recreating the application container must preserve exported state and layout. After reset, another recreation must preserve the empty state; loading local configuration adds only the probe and configured ranges. Only the isolated fixture receives `NET_ADMIN` to create the dummy interface; neither container can reach the host LAN. The script ignores local overrides and `.env`, refuses an existing `boushun-ci` project or data volume, and removes its synthetic containers and volume on completion or test failure.
 
 Run local checks from the repository root after `npm ci`, using a supported Node.js version. Install the matching browser with `npx playwright install chromium`; on supported Linux CI runners, `npx playwright install --with-deps chromium` also installs browser system dependencies. See the official [Playwright browser installation reference](https://playwright.dev/docs/browsers#install-browsers). Container acceptance additionally requires Docker Engine and the Compose plugin on Linux. It is not part of the browser test command.
 
