@@ -1,5 +1,6 @@
 import { containsIPv4 } from "./ipv4.js";
 import { resolveInterfacePolicy } from "./interface-policy.js";
+import { annotateObservations, currentResponses, observationChecks } from "./observation.js";
 
 const EMPTY_OVERRIDES = Object.freeze({ devices: {}, merges: [], splits: [], audit: [] });
 
@@ -18,7 +19,21 @@ export function buildInventory(snapshot, overrides = EMPTY_OVERRIDES, settings =
   const services = new Map();
   const networks = new Map();
 
-  for (const raw of snapshot.devices ?? []) {
+  const rawDevices = [...(snapshot.devices ?? [])];
+  const knownAddresses = new Set(rawDevices.flatMap((item) => item.addresses ?? []));
+  for (const response of currentResponses(observationChecks(snapshot))) {
+    if (knownAddresses.has(response.address)) continue;
+    knownAddresses.add(response.address);
+    rawDevices.push({ id: `device:ip:${response.address}`, addresses: [response.address], source: response.method,
+      evidenceIds: response.evidenceIds, identityConfidence: "inferred" });
+  }
+  for (const node of snapshot.kubernetes?.nodes ?? []) {
+    if (node.addresses?.some((address) => knownAddresses.has(address)) || !node.addresses?.length) continue;
+    rawDevices.push({ id: `device:kubernetes:${safeId(node.name)}`, name: node.name, addresses: node.addresses,
+      source: "kubernetes-api", role: "kubernetes-node", evidenceIds: node.evidenceIds, identityConfidence: "verified" });
+    node.addresses.forEach((address) => knownAddresses.add(address));
+  }
+  for (const raw of rawDevices) {
     const policy = resolveInterfacePolicy(raw.interface, raw.state, settings);
     if (raw.id !== "device:self" && !policy.identity) continue;
     const id = raw.id;
@@ -26,7 +41,7 @@ export function buildInventory(snapshot, overrides = EMPTY_OVERRIDES, settings =
       id,
       name: raw.name ?? null,
       role: raw.role ?? "host",
-      status: normalizeStatus(raw.state),
+      status: "unconfirmed",
       manufacturer: raw.manufacturer ?? null,
       model: raw.model ?? null,
       os: raw.os ?? null,
@@ -136,6 +151,7 @@ export function buildInventory(snapshot, overrides = EMPTY_OVERRIDES, settings =
   applyMerges(overrides.merges, { devices, interfaces, assignments });
   applyDeviceOverrides(overrides.devices, devices);
   annotateDeviceIdentities(snapshot, { devices, interfaces, assignments });
+  annotateObservations(snapshot, { devices, assignments, services });
 
   for (const assignment of assignments.values()) {
     assignment.networkId = findNetwork(assignment.address, networks);
@@ -253,7 +269,7 @@ function applyObservedServices(endpoints, context, options) {
           id: deviceId,
           name: null,
           role: "host",
-          status: "online",
+          status: "responded",
           manufacturer: null,
           model: null,
           os: null,
@@ -311,7 +327,7 @@ function applyObservedServices(endpoints, context, options) {
     assignment.evidenceIds = unique([...(assignment.evidenceIds ?? []), ...evidenceIds]);
     const device = assignment.deviceId ? context.devices.get(assignment.deviceId) : null;
     if (device) {
-      device.status = "online";
+      device.status = "responded";
       device.sourceKinds = unique([...device.sourceKinds, options.sourceKind]);
       device.evidenceIds = unique([...device.evidenceIds, ...evidenceIds]);
     }
@@ -362,6 +378,8 @@ function applyKubernetes(kubernetes, context) {
     device.tags = unique([...device.tags, ...(node.roles ?? []).map((role) => `k8s:${role}`)]);
     device.evidenceIds = unique([...device.evidenceIds, ...(node.evidenceIds ?? [])]);
     device.identityConfidence = "verified";
+    device.reportedConditions = node.conditions ?? [];
+    device.registrationRetrievedAt = kubernetes.nodeRetrievedAt ?? kubernetes.retrievedAt ?? null;
   }
 
   for (const source of kubernetes.services ?? []) {
@@ -515,14 +533,6 @@ function findNetwork(address, networks) {
   if (address.includes(":")) return null;
   for (const network of networks.values()) if (containsIPv4(network.cidr, address)) return network.id;
   return null;
-}
-
-function normalizeStatus(state) {
-  const value = String(state ?? "unknown").toUpperCase();
-  if (["UP", "REACHABLE", "PERMANENT", "NOARP"].some((token) => value.includes(token))) return "online";
-  if (["STALE", "DELAY", "PROBE"].some((token) => value.includes(token))) return "recent";
-  if (["DOWN", "FAILED"].some((token) => value.includes(token))) return "offline";
-  return "unknown";
 }
 
 function safeId(value) {

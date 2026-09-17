@@ -85,6 +85,7 @@ async function startServer(t, options) {
     port: 0,
     dataDirectory: directory,
     startScheduler: false,
+    demo: true,
     allowedCIDRs: ["192.168.50.0/24"],
     ...options,
   });

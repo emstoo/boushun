@@ -1,4 +1,5 @@
 import path from "node:path";
+import { assertSafeScanCIDR, parseCIDR } from "../domain/ipv4.js";
 import { collectLinux } from "./linux.js";
 import { collectKubernetes } from "./kubernetes.js";
 import { collectDiscovery } from "./discovery.js";
@@ -14,6 +15,11 @@ export async function collectNetwork(options = {}) {
   const snmpCollector = options.snmpCollector ?? collectSnmp;
   const snapshot = await collectLinux({ ...options, onProgress });
   throwIfAborted(options.signal);
+  snapshot.scanCandidates = allowedCandidates(snapshot.scanCandidates, options.allowedCIDRs ?? []);
+  if (options.profile === "local") {
+    snapshot.sources = snapshot.sources.filter((source) => source.id === "local-network");
+    return snapshot;
+  }
 
   onProgress({ phase: "identification", completed: 0, total: 2, message: "Matching Kubernetes and OUI data" });
   const kubernetes = await kubernetesCollector({
@@ -24,6 +30,9 @@ export async function collectNetwork(options = {}) {
   });
   snapshot.kubernetes = {
     available: kubernetes.available,
+    nodeStatus: kubernetes.nodeStatus,
+    serviceStatus: kubernetes.serviceStatus,
+    retrievedAt: new Date().toISOString(),
     nodes: kubernetes.nodes,
     services: kubernetes.services,
   };
@@ -99,6 +108,18 @@ export async function collectNetwork(options = {}) {
   }
 
   return snapshot;
+}
+
+function allowedCandidates(candidates, allowed) {
+  return [...new Set(candidates.flatMap((cidr) => {
+    const local = parseCIDR(cidr);
+    return [cidr, ...allowed.filter((item) => {
+      const scope = parseCIDR(item);
+      return scope && local && scope.networkInt >= local.networkInt && scope.broadcastInt <= local.broadcastInt;
+    })].flatMap((item) => {
+      try { return [assertSafeScanCIDR(item, allowed).canonical]; } catch { return []; }
+    });
+  }))];
 }
 
 function discoverySource(id, label, records, warnings) {

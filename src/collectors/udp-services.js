@@ -100,6 +100,7 @@ export async function collectUdpServices(options = {}) {
   if (attemptCount > MAX_ATTEMPTS) throw validationError(`A UDP service scan is limited to ${MAX_ATTEMPTS} address-port checks`);
 
   const endpoints = [];
+  const responseTimes = new WeakMap();
   const uncertainEndpoints = [];
   const outcomeCounts = { open: 0, closed: 0, "open-or-filtered": 0, unreachable: 0, error: 0 };
   const waitForPermit = createPacer(rateLimitPerSecond);
@@ -146,11 +147,15 @@ export async function collectUdpServices(options = {}) {
           latencyMs: result.latencyMs ?? null,
           probesSent: result.probesSent,
         };
-        if (state === "open") endpoints.push({
+        if (state === "open") {
+          const endpoint = {
           ...base,
           responseBytes: result.responseBytes ?? null,
           responsePreviewHex: result.responsePreviewHex ?? null,
-        });
+          };
+          responseTimes.set(endpoint, (options.responseNow?.() ?? new Date()).toISOString());
+          endpoints.push(endpoint);
+        }
         if (state === "open-or-filtered") uncertainEndpoints.push(base);
         completed += 1;
         onProgress({ phase: "udp-services", completed, total: attemptCount, message: `${completed}/${attemptCount} checks · ${endpoints.length} confirmed open · ${uncertainEndpoints.length} uncertain`, metrics: { confirmedOpen: endpoints.length, uncertain: uncertainEndpoints.length, transmissions: transmissionCount } });
@@ -163,7 +168,7 @@ export async function collectUdpServices(options = {}) {
 
   endpoints.sort(compareEndpoint);
   uncertainEndpoints.sort(compareEndpoint);
-  const evidence = endpoints.map((endpoint) => evidenceRecord(observedAt, "udp-service-open", `${endpoint.address}:${endpoint.port}/udp returned a datagram`, endpoint));
+  const evidence = endpoints.map((endpoint) => evidenceRecord(responseTimes.get(endpoint), "udp-service-open", `${endpoint.address}:${endpoint.port}/udp returned a datagram`, endpoint));
   endpoints.forEach((endpoint, index) => { endpoint.evidenceIds = [evidence[index].id]; });
   const summaryEvidence = evidenceRecord(observedAt, "udp-service-scan", `Checked ${attemptCount} UDP endpoints and confirmed ${endpoints.length} open`, {
     cidr: safeCIDR.canonical,
@@ -357,7 +362,7 @@ function serviceName(port) {
 
 function evidenceRecord(observedAt, type, summary, raw) {
   const digest = createHash("sha256").update(`${observedAt}\0${type}\0${summary}\0${JSON.stringify(raw)}`).digest("hex").slice(0, 16);
-  return { id: `evidence:${digest}`, type, source: "udp-probe", observedAt, summary, raw };
+  return { id: `evidence:${digest}`, type, source: "udp-probe", observedAt, retrievedAt: observedAt, sourceObservedAt: observedAt, summary, raw };
 }
 
 function uniquePorts(ports) {

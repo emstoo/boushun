@@ -81,6 +81,20 @@ export function collectDemo(now = () => new Date(), options = {}) {
     warnings: [],
     summary: { deviceCount: 7, neighborCount: 7, networkCount: 1, localAddressCount: 1 },
   };
+  if (options.profile === "local") {
+    return { ...snapshot, profile: "local", devices: snapshot.devices.filter((item) => item.id === "device:self"),
+      evidence: snapshot.evidence.filter((item) => ["interface-address", "default-route"].includes(item.type)),
+      explicitLinks: [], scan: null, sources: [source("local-network", "Local configuration", 1, "Synthetic local configuration loaded")],
+      resolver: [], summary: { deviceCount: 1, networkCount: 1, localAddressCount: 1 } };
+  }
+  snapshot.scan.probes = snapshot.devices.filter((item) => item.id !== "device:self").map((device) => {
+    const address = device.addresses[0];
+    const record = { ...e(`response:${address}`, "probe-response", "synthetic-icmp", `${address} responded in the synthetic fixture`),
+      retrievedAt: observedAt, sourceObservedAt: observedAt, raw: { address, result: "response", observedAt } };
+    snapshot.evidence.push(record);
+    device.evidenceIds.push(record.id);
+    return { address, result: "response", observedAt, evidenceId: record.id };
+  });
   return options.includeServices ? withDemoServices(snapshot, observedAt) : snapshot;
 }
 

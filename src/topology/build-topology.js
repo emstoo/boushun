@@ -43,7 +43,7 @@ export function buildTopologyViews(snapshot, overrides, settings) {
 }
 
 function buildPhysical(inventory, nodes, links) {
-  const visibleDevices = inventory.devices.filter((device) => deviceVisible(device, inventory));
+  const visibleDevices = inventory.devices.filter((device) => deviceVisible(device, inventory) && device.observation?.kind !== "registered");
   const visibleIds = new Set(visibleDevices.map((device) => device.id));
   for (const link of inventory.links) if (visibleIds.has(link.source) && visibleIds.has(link.target)) links.push({ ...link });
   const linked = new Set(links.flatMap((link) => [link.source, link.target]));
@@ -67,7 +67,7 @@ function buildLogical(snapshot, inventory, nodes, links) {
   for (const device of inventory.devices) {
     for (const assignmentId of device.ipAssignmentIds) {
       const assignment = assignments.get(assignmentId);
-      if (!assignment?.networkId || assignment.kind === "vip" || assignment.mapVisible === false) continue;
+      if (!assignment?.networkId || assignment.kind === "vip" || assignment.mapVisible === false || assignment.observation?.kind === "candidate") continue;
       links.push({ id: `link:membership:${safeId(assignment.networkId)}:${safeId(device.id)}`, source: assignment.networkId, target: device.id, layer: "l3", relation: "address-membership", confidence: assignment.confidence, label: assignment.address, evidenceIds: assignment.evidenceIds });
     }
   }
@@ -93,7 +93,7 @@ function buildServices(inventory, nodes, links) {
   const kubernetesNodes = inventory.devices.filter((item) => item.role === "kubernetes-node" && deviceVisible(item, inventory));
   let nodePortGroupAdded = false;
   const internal = inventory.services.filter((service) => service.addresses.length === 0 && service.kind === "kubernetes-clusterip");
-  const external = inventory.services.filter((service) => !internal.includes(service));
+  const external = inventory.services.filter((service) => !internal.includes(service) && service.observation?.kind !== "candidate");
   for (const service of external) {
     nodes.push(serviceNode(service));
     for (const address of service.addresses) {
@@ -118,7 +118,7 @@ function buildServices(inventory, nodes, links) {
           role: "kubernetes-node-group",
           label: "Kubernetes nodes",
           subtitle: `${kubernetesNodes.length} NodePort endpoints`,
-          status: kubernetesNodes.length ? "online" : "unknown",
+          status: "registered",
           confidence: "verified",
           addresses: kubernetesNodes.flatMap((device) => addressesForDevice(device, inventory)),
           evidenceIds: unique(kubernetesNodes.flatMap((device) => device.evidenceIds)),
@@ -193,12 +193,13 @@ function deviceNode(device, inventory) {
   return { id: device.id, kind: "device", role: device.role, label: device.name || device.suggestedName || addresses[0] || "Unnamed device", subtitle: addresses.join(", ") || [device.manufacturer, device.model].filter(Boolean).join(" · ") || device.role, status: device.status, confidence: device.identityConfidence, addresses, evidenceIds: device.evidenceIds, metadata: { manufacturer: device.manufacturer, model: device.model, os: device.os, sources: device.sourceKinds.join(", "), tags: device.tags.join(", "), identityReview: device.needsIdentityReview ? "Needs review" : null } };
 }
 
-function networkNode(network) { return { id: network.id, kind: "network", role: "network", label: network.name, subtitle: `${network.family.toUpperCase()} segment`, status: "online", confidence: "verified", addresses: [], evidenceIds: network.evidenceIds, metadata: { cidr: network.cidr } }; }
-function ipNode(assignment) { return { id: assignment.id, kind: "ip", role: assignment.kind === "vip" ? "vip" : "address", label: assignment.address, subtitle: assignment.kind.toUpperCase(), status: "online", confidence: assignment.confidence, addresses: [assignment.address], evidenceIds: assignment.evidenceIds, metadata: { kind: assignment.kind, network: assignment.networkId } }; }
-function serviceNode(service) { return { id: service.id, kind: "service", role: "service", label: service.name, subtitle: `${service.namespace} · ${service.kind}`, status: "online", confidence: "verified", addresses: service.addresses, evidenceIds: service.evidenceIds, metadata: { namespace: service.namespace, kind: service.kind, ports: portLabel(service.ports), clusterAddresses: service.clusterAddresses.join(", ") } }; }
+function networkNode(network) { return { id: network.id, kind: "network", role: "network", label: network.name, subtitle: `${network.family.toUpperCase()} segment`, status: "configured", confidence: "verified", addresses: [], evidenceIds: network.evidenceIds, metadata: { cidr: network.cidr } }; }
+function ipNode(assignment) { return { id: assignment.id, kind: "ip", role: assignment.kind === "vip" ? "vip" : "address", label: assignment.address, subtitle: assignment.kind.toUpperCase(), status: observationStatus(assignment), confidence: assignment.confidence, addresses: [assignment.address], evidenceIds: assignment.evidenceIds, metadata: { kind: assignment.kind, network: assignment.networkId } }; }
+function serviceNode(service) { return { id: service.id, kind: "service", role: "service", label: service.name, subtitle: `${service.namespace} · ${service.kind}`, status: observationStatus(service), confidence: "verified", addresses: service.addresses, evidenceIds: service.evidenceIds, metadata: { namespace: service.namespace, kind: service.kind, ports: portLabel(service.ports), clusterAddresses: service.clusterAddresses.join(", ") } }; }
+function observationStatus(item) { return ({ local: "configured", response: "responded", registered: "registered", candidate: "unconfirmed" })[item.observation?.kind] ?? "unknown"; }
 
 function addressesForDevice(device, inventory) { const ids = new Set(device.ipAssignmentIds); return inventory.ipAssignments.filter((item) => ids.has(item.id) && item.deviceId === device.id && item.mapVisible !== false).map((item) => item.address).sort(); }
-function deviceVisible(device, inventory) { const interfaces = inventory.interfaces.filter((item) => device.interfaceIds.includes(item.id)); return interfaces.length === 0 || interfaces.some((item) => item.mapVisible !== false); }
+function deviceVisible(device, inventory) { if (device.observation?.kind === "candidate") return false; const interfaces = inventory.interfaces.filter((item) => device.interfaceIds.includes(item.id)); return interfaces.length === 0 || interfaces.some((item) => item.mapVisible !== false); }
 function legacyDevice(device, inventory) { const interfaceItems = inventory.interfaces.filter((item) => device.interfaceIds.includes(item.id)); return { ...device, addresses: addressesForDevice(device, inventory), mac: interfaceItems.find((item) => item.mac)?.mac ?? null, state: device.status }; }
 function event(type, entityId, summary) { return { type, entityId, summary }; }
 function diffEntitySet(kind, before, after, events) { const oldIds = new Set(before.map((item) => item.id)); const newIds = new Set(after.map((item) => item.id)); for (const item of after) if (!oldIds.has(item.id)) events.push(event(`${kind}.added`, item.id, `Added ${kind} ${item.name || item.label || item.id}`)); for (const item of before) if (!newIds.has(item.id)) events.push(event(`${kind}.removed`, item.id, `Removed ${kind} ${item.name || item.label || item.id}`)); }

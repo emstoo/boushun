@@ -363,6 +363,7 @@ test("[DB-10] database replacement is rejected while a scan is active", async (t
   const scanGate = new Promise((resolve) => { releaseScan = resolve; });
   let collectionCount = 0;
   const { server } = await createBoushunServer({
+    demo: true,
     host: "127.0.0.1",
     port: 0,
     dataDirectory: temporaryDirectory,

@@ -58,7 +58,7 @@
             <div><dt>Host</dt><dd id="probe-host">—</dd></div>
             <div><dt>Mode</dt><dd id="probe-mode">Passive</dd></div>
           </dl>
-          <button class="button secondary full" id="passive-scan" data-capability="collect">Refresh facts</button>
+          <button class="button secondary full" id="passive-scan" data-capability="collect">Load local configuration</button>
         </section>
         <p class="privacy-note">All observations stay on this machine.</p>
       </aside>
@@ -114,9 +114,9 @@
             <div class="scan-status-heading">
               <strong>The database is empty</strong>
             </div>
-            <p>Collect local interface facts to restore eligible scan ranges.</p>
+            <p>Load local configuration to choose eligible scan ranges. Device confirmation is a separate action.</p>
           </div>
-          <button class="button primary" id="database-collect-facts" data-capability="collect" type="button">Collect local facts</button>
+          <button class="button primary" id="database-collect-facts" data-capability="collect" type="button">Load local configuration</button>
         </section>
 
         <section class="stats-grid" aria-label="Network summary">
@@ -188,9 +188,9 @@
             <aside class="node-status-legend" aria-label="Node status legend">
               <strong>Node status</strong>
               <div class="node-status-legend-items">
-                <span><i class="status-legend-dot online" aria-hidden="true"></i>Online</span>
-                <span><i class="status-legend-dot recent" aria-hidden="true"></i>Recent</span>
-                <span><i class="status-legend-dot offline" aria-hidden="true"></i>Offline</span>
+                <span><i class="status-legend-dot online" aria-hidden="true"></i>Responded</span>
+                <span><i class="status-legend-dot recent" aria-hidden="true"></i>Registered</span>
+                <span><i class="status-legend-dot offline" aria-hidden="true"></i>Configured</span>
                 <span><i class="status-legend-dot unknown" aria-hidden="true"></i>Unknown</span>
               </div>
             </aside>
@@ -340,6 +340,14 @@
               <tbody id="inventory-body"></tbody>
             </table>
           </div>
+          <details id="candidate-inventory">
+            <summary>Unconfirmed candidates (<span id="candidate-count">0</span>)</summary>
+            <p>Cache and saved export entries are reference information. They are excluded from the map until supported by a direct response or a registered API resource.</p>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Status</th><th>Device</th><th>Address</th><th>MAC</th><th>Role</th><th>Identity</th><th>Action</th></tr></thead>
+              <tbody id="candidate-inventory-body"></tbody>
+            </table></div>
+          </details>
         </section>
 
         <section class="panel evidence-panel hidden" id="evidence-section">
@@ -355,6 +363,7 @@
           <div class="panel-header">
             <div><p class="section-kicker">Collector diagnostics</p><h2>Data sources</h2></div>
             <span class="record-count" id="source-summary">—</span>
+            <button class="button secondary" id="refresh-sources" data-capability="collect" type="button">Refresh source records</button>
           </div>
           <div class="source-grid" id="source-grid"></div>
           <div class="subsection-header">

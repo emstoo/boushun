@@ -112,6 +112,8 @@ try {
   await compose("up", "--detach", "--no-build", "--pull", "never", "--no-deps", "--force-recreate", "--wait", "--wait-timeout", "60", "boushun");
   assert.notEqual(await compose("ps", "--quiet", "boushun"), id);
   console.log(await compose("exec", "--no-TTY", "boushun", "node", "/acceptance/verify.mjs", "after"));
+  await compose("up", "--detach", "--no-build", "--pull", "never", "--no-deps", "--force-recreate", "--wait", "--wait-timeout", "60", "boushun");
+  console.log(await compose("exec", "--no-TTY", "boushun", "node", "/acceptance/verify.mjs", "reset-after"));
 } catch (error) {
   if (!interrupted) console.error(error);
   process.exitCode = 1;

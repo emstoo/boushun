@@ -13,11 +13,26 @@ const api = async (endpoint, method = "GET", body) => {
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(5_000),
   });
-  assert.equal(response.status, method === "POST" ? 202 : 200, endpoint);
+  assert.equal(response.status, method === "POST" && endpoint !== "database/reset" ? 202 : 200, endpoint);
   return response.json();
 };
 
 assert.notEqual(process.getuid(), 0);
+async function waitForJob(job) {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    const result = await api(`scans/${job.id}`);
+    assert.ok(!["failed", "cancelled"].includes(result.job.status), "Synthetic collection must succeed");
+    if (result.job.status === "completed") return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.fail("Synthetic job exceeded its deadline");
+}
+if (phase === "before" || phase === "reset-after") {
+  assert.equal((await api("state")).snapshot, null, "Startup must preserve an empty database");
+  await waitForJob((await api("scan", "POST", { profile: "local" })).job);
+  assert.deepEqual((await api("state")).inventory.devices.map((device) => device.id), ["device:self"]);
+}
 const state = await api("state");
 assert.equal(state.sourceHealth.find((source) => source.id === "local-network")?.status, "connected");
 assert.ok(state.snapshot.interfaces.some((item) => item.name === "boushun0"
@@ -54,7 +69,13 @@ if (phase === "before") {
 } else if (phase === "after") {
   assert.deepEqual(state.layout, positions);
   assert.deepEqual((await api("database/export")).state, JSON.parse(await readFile("/data/acceptance-baseline.json", "utf8")));
+  await api("database/reset", "POST", { confirmation: "RESET" });
+  assert.equal((await api("state")).snapshot, null);
+} else if (phase === "reset-after") {
+  assert.deepEqual(state.layout, {});
+  assert.deepEqual(state.serviceSchedules, []);
+  assert.equal((await api("database")).summary.snapshots, 1);
 } else {
-  throw new Error("Expected before or after phase");
+  throw new Error("Expected before, after, or reset-after phase");
 }
 console.log(`Container ${phase}: collection, storage and runtime boundaries passed`);

@@ -26,7 +26,6 @@ export async function readSnmpTargets(filePath) {
 }
 
 export async function collectSnmp(options = {}) {
-  const observedAt = options.observedAt ?? new Date().toISOString();
   const createSession = options.createSession ?? createV3Session;
   const targets = options.targets ?? [];
   const evidence = [];
@@ -48,7 +47,8 @@ export async function collectSnmp(options = {}) {
         walk(session, OIDS.lldpRemote, options.signal),
       ]);
       const normalized = normalizeObservation(target, { system, interfaces, bridgePorts, fdb, lldpRemote });
-      const record = makeEvidence(observedAt, target.host, normalized);
+      normalized.observedAt = (options.now?.() ?? new Date()).toISOString();
+      const record = makeEvidence(normalized.observedAt, target.host, normalized);
       evidence.push(record);
       normalized.evidenceIds = [record.id];
       observations.push(normalized);
@@ -169,6 +169,8 @@ function makeEvidence(observedAt, host, observation) {
     type: "snmp-topology",
     source: "snmpv3",
     observedAt,
+    retrievedAt: observedAt,
+    sourceObservedAt: observedAt,
     summary: `Read IF-MIB, LLDP-MIB, and BRIDGE-MIB from ${host}`,
     raw,
   };

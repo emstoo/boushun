@@ -2,7 +2,9 @@
 
 ## Scan profiles and safety
 
-`passive` reads host facts and local APIs only. `standard` validates a private/link-local CIDR, rejects anything larger than `/24`, excludes network/broadcast/local addresses, sends one ICMP echo attempt to each remaining address, refreshes the neighbor cache, and runs bounded reverse DNS. `deep` adds a short mDNS/SSDP multicast window and configured SNMPv3 targets.
+Live startup performs no collection. **Load local configuration** (`local`) reads only interfaces and routes and presents eligible ranges inside the configured allowlist. **Refresh source records** (`passive`) in Sources reads the neighbor cache, resolver, leases, configured APIs, controller exports, and local OUI data without active probes. `standard` validates a private/link-local CIDR, rejects anything larger than `/24`, excludes network/broadcast/local addresses, sends one ICMP echo attempt to each remaining address, refreshes the neighbor cache, and runs bounded reverse DNS. `deep` adds a short mDNS/SSDP multicast window and configured SNMPv3 targets.
+
+Cache/export-only devices are unconfirmed candidates in the collapsed Inventory list, not default map nodes. The map distinguishes configured objects, registered API resources, and responses from a completed check. A response confirms only its address, method, and time. A later source read does not refresh that confirmation; a timeout does not establish absence. Device details show retrieval, source observation, and direct response times independently, with unknown source times left unknown.
 
 TCP service discovery is a separate operation. It checks every usable address in the selected range regardless of ICMP response, including the probe host, using ordinary TCP connections that are closed immediately without an application payload. Network and broadcast addresses are excluded. A run is limited to 64 unique ports and 16,384 connection attempts. Presets can be extended with comma-separated ports or bounded ranges such as `8123,9000-9003`.
 
@@ -15,6 +17,8 @@ No passive, standard, or deep profile scans ports. Service discovery does not se
 `data/state.json` is written atomically with mode `0600`; the directory is `0700`, and the latest 50 raw snapshots are retained. A v1 file is projected and rewritten as v2 on the next mutation. Current-state composition is a read model over those append-only snapshots, so upgrading does not rewrite existing observations. Overrides never rewrite raw observations and each edit appends an actor, time, action, before/after record, up to 500 records.
 
 The Database screen exports the complete state file in a versioned Boushun wrapper. Import accepts a raw v1/v2 state or the current wrapper. It validates the document without mutation first and has a 25 MiB request limit. Import and reset are rejected while a scan is active. Before either replacement, Boushun writes a mode `0600` backup beside `state.json` and retains the five newest `state.backup.*.json` files. Reset affects only Boushun state; `oui.csv`, kubeconfig, controller exports, and SNMP target or credential files remain untouched.
+
+Reset clears observations, history, manual edits, layout, interface settings, schedules, and notifications. Reloading or restarting Docker preserves the empty state. Choose **Load local configuration** to restore the probe and eligible ranges, then explicitly start a check to obtain device responses. Old OS cache entries and saved exports may be retrieved as candidates but cannot restore confirmed results. Recovery backups are retained for explicit import; reset is not secure erasure. A new local demo is seeded once, and an existing reset demo remains empty on restart.
 
 ## Container image maintenance
 

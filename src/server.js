@@ -8,6 +8,7 @@ import { collectTcpServices, resolveTcpServicePorts, tcpServicePresets } from ".
 import { collectUdpServices, resolveUdpServicePorts, udpServicePresets } from "./collectors/udp-services.js";
 import { composeCurrentSnapshot } from "./domain/current-state.js";
 import { withInventory } from "./domain/inventory.js";
+import { latestTime } from "./domain/observation.js";
 import { resolveInterfacePolicy } from "./domain/interface-policy.js";
 import { assertSafeScanCIDR } from "./domain/ipv4.js";
 import { buildComparableServiceChanges, endpointKey } from "./domain/service-observation.js";
@@ -42,26 +43,35 @@ export async function createBoushunServer(options = {}) {
 
   assertBindingIsSafe(config.host);
   const store = options.store ?? new JsonStore(config.dataDirectory);
-  await store.initialize();
+  const newDatabase = await store.initialize();
 
   const collector = options.collector ?? (config.demo
-    ? async () => collectDemo()
+    ? async (input) => collectDemo(undefined, { profile: input?.profile })
     : (collectorOptions) => collectNetwork({ ...collectorOptions, allowedCIDRs: config.allowedCIDRs, dataDirectory: config.dataDirectory }));
   const tcpServiceCollector = options.tcpServiceCollector ?? collectTcpServices;
   const udpServiceCollector = options.udpServiceCollector ?? collectUdpServices;
 
-  if (!(await store.latest()) || config.demo) {
+  if (config.demo && newDatabase) {
     const initial = await collector({ profile: "passive" });
     await store.saveSnapshot(initial);
   }
 
   const scans = options.scanManager ?? new ScanManager();
   let databaseMutationActive = false;
+  let databaseGeneration = 0;
+  const assertGeneration = (generation) => {
+    if (databaseMutationActive || generation !== databaseGeneration) throw conflictError("The database changed; reload before starting another operation");
+  };
   const startServiceScan = async (protocol, body, metadata = {}) => {
+    const generation = databaseGeneration;
     if (databaseMutationActive) throw conflictError("Database maintenance is in progress");
     const cidr = body.cidr;
     assertSafeScanCIDR(cidr, config.allowedCIDRs);
     const scanState = await store.read();
+    assertGeneration(generation);
+    if (metadata.scheduleId && !scanState.settings.serviceSchedules.some((schedule) => schedule.id === metadata.scheduleId && schedule.enabled)) {
+      throw conflictError("The schedule is no longer enabled or was removed");
+    }
     const latest = composeCurrentSnapshot(scanState.snapshots);
     const preset = body.preset || (protocol === "tcp" ? "lan-common" : "safe-common");
     const ports = protocol === "tcp"
@@ -97,7 +107,11 @@ export async function createBoushunServer(options = {}) {
         [`${protocol}ServiceHostCount`]: services.openHostCount,
         ...(protocol === "udp" ? { udpServiceUncertainCount: services.uncertainCount } : {}),
       };
-      if (!signal.aborted) await store.saveSnapshot(snapshot);
+      if (services.outcomeCounts?.error) throw new Error("Service check failed for some endpoints; previous results were retained");
+      if (!signal.aborted) {
+        assertGeneration(generation);
+        await store.saveSnapshot(snapshot);
+      }
       if (!signal.aborted && metadata.scheduleId) {
         const saved = await store.read();
         const changes = buildComparableServiceChanges(saved.snapshots, snapshot, protocol);
@@ -131,6 +145,12 @@ export async function createBoushunServer(options = {}) {
   const scheduler = options.serviceScheduler ?? new ServiceScheduler({ store, run: runScheduledServiceScan });
   if (options.startScheduler !== false) scheduler.start();
   const server = createServer(async (request, response) => {
+    const requestGeneration = databaseGeneration;
+    const readJsonBody = async (incoming, maxBytes) => {
+      const body = await readJsonRequestBody(incoming, maxBytes);
+      assertGeneration(requestGeneration);
+      return body;
+    };
     try {
       setSecurityHeaders(response);
       assertRequestBoundary(request, config.host);
@@ -148,6 +168,7 @@ export async function createBoushunServer(options = {}) {
         const previous = projectSnapshot(rawPrevious, state);
         const topologies = buildTopologyViews(snapshot, state.overrides, state.settings);
         return json(response, 200, {
+          databaseGeneration: requestGeneration,
           snapshot,
           inventory: snapshot?.inventory ?? null,
           topology: topologies.logical,
@@ -222,15 +243,20 @@ export async function createBoushunServer(options = {}) {
       if (request.method === "POST" && url.pathname === "/api/scan") {
         const body = await readJsonBody(request);
         const profile = body.profile ?? "passive";
-        if (!new Set(["passive", "standard", "deep"]).has(profile)) {
-          return json(response, 400, { error: "profile must be passive, standard, or deep" });
+        if (!new Set(["local", "passive", "standard", "deep"]).has(profile)) {
+          return json(response, 400, { error: "profile must be local, passive, standard, or deep" });
         }
         try {
           if (databaseMutationActive) throw conflictError("Database maintenance is in progress");
+          const generation = databaseGeneration;
           const scanState = await store.read();
+          assertGeneration(generation);
           const job = scans.start({ profile, cidr: body.cidr || null }, async ({ signal, onProgress }) => {
             const snapshot = await collector({ profile, cidr: body.cidr || undefined, signal, onProgress, settings: scanState.settings });
-            if (!signal.aborted) await store.saveSnapshot(snapshot);
+            if (!signal.aborted) {
+              assertGeneration(generation);
+              await store.saveSnapshot(snapshot);
+            }
             return snapshot;
           });
           return json(response, 202, { job });
@@ -320,7 +346,9 @@ export async function createBoushunServer(options = {}) {
         if (scans.active() || databaseMutationActive) return json(response, 409, { error: "Wait for the active scan or database operation to finish", job: scans.active() });
         databaseMutationActive = true;
         try {
-          return json(response, 200, await store.importDatabase(body.database));
+          const result = await store.importDatabase(body.database);
+          databaseGeneration += 1;
+          return json(response, 200, result);
         } finally {
           databaseMutationActive = false;
         }
@@ -332,7 +360,9 @@ export async function createBoushunServer(options = {}) {
         if (scans.active() || databaseMutationActive) return json(response, 409, { error: "Wait for the active scan or database operation to finish", job: scans.active() });
         databaseMutationActive = true;
         try {
-          return json(response, 200, await store.resetDatabase());
+          const result = await store.resetDatabase();
+          databaseGeneration += 1;
+          return json(response, 200, result);
         } finally {
           databaseMutationActive = false;
         }
@@ -340,6 +370,7 @@ export async function createBoushunServer(options = {}) {
 
       if (request.method === "POST" && url.pathname === "/api/schedules") {
         const body = await validateScheduleInput(await readJsonBody(request));
+        assertGeneration(requestGeneration);
         return json(response, 201, await store.saveServiceSchedule(body, request.headers["x-boushun-actor"]));
       }
 
@@ -350,9 +381,11 @@ export async function createBoushunServer(options = {}) {
         const existing = state.settings.serviceSchedules.find((item) => item.id === id);
         if (!existing) return json(response, 404, { error: "Schedule not found" });
         const body = await validateScheduleInput({ ...existing, ...(await readJsonBody(request)) });
+        assertGeneration(requestGeneration);
         return json(response, 200, await store.updateServiceSchedule(id, body, request.headers["x-boushun-actor"]));
       }
       if (scheduleMatch && request.method === "DELETE") {
+        assertGeneration(requestGeneration);
         return json(response, 200, await store.deleteServiceSchedule(decodeURIComponent(scheduleMatch[1]), request.headers["x-boushun-actor"]));
       }
 
@@ -361,6 +394,7 @@ export async function createBoushunServer(options = {}) {
         const id = decodeURIComponent(runScheduleMatch[1]);
         const state = await store.read();
         const schedule = state.settings.serviceSchedules.find((item) => item.id === id);
+        assertGeneration(requestGeneration);
         if (!schedule) return json(response, 404, { error: "Schedule not found" });
         try {
           const job = await startServiceScan(schedule.protocol, schedule, { trigger: "schedule", scheduleId: schedule.id });
@@ -428,6 +462,7 @@ export async function createBoushunServer(options = {}) {
           name: address,
           role: "host",
         }));
+        assertGeneration(requestGeneration);
         return json(response, 201, await store.saveSplitBatch(splits, request.headers["x-boushun-actor"]));
       }
 
@@ -462,8 +497,12 @@ export async function createBoushunServer(options = {}) {
           manufacturer: device.manufacturer ?? "",
           model: device.model ?? "",
           sources: device.sourceKinds.join("; "),
+          retrieved_at: device.observation.retrievedAt,
+          source_observed_at: device.observation.sourceObservedAt,
+          last_response_at: device.observation.lastResponseAt,
+          responding_addresses: [...new Set(device.observation.responses.map((item) => item.address))].join("; "),
         }));
-        return csv(response, "boushun-inventory.csv", rows, ["status", "name", "suggested_name", "addresses", "mac", "role", "identity_confidence", "identity_review", "manufacturer", "model", "sources"]);
+        return csv(response, "boushun-inventory.csv", rows, ["status", "name", "suggested_name", "addresses", "mac", "role", "identity_confidence", "identity_review", "manufacturer", "model", "sources", "retrieved_at", "source_observed_at", "last_response_at", "responding_addresses"]);
       }
 
       if (request.method === "GET" && url.pathname === "/api/export/ports.csv") {
@@ -554,7 +593,7 @@ export async function start() {
   });
   const address = server.address();
   console.log(`Boushun is listening on http://${config.host}:${address.port}`);
-  console.log(config.demo ? "Demo mode: synthetic evidence is being displayed." : "Live mode: startup collection is passive only.");
+  console.log(config.demo ? "Demo mode: synthetic evidence is being displayed." : "Live mode: collection starts only on request.");
 
   const shutdown = (signal) => {
     console.log(`Received ${signal}; shutting down.`);
@@ -601,7 +640,7 @@ function csvCell(value) {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
-async function readJsonBody(request, maxBytes = 64 * 1024) {
+async function readJsonRequestBody(request, maxBytes = 64 * 1024) {
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
@@ -726,6 +765,7 @@ function snapshotMetadata(snapshot) {
 
 function buildPresence(state) {
   const presence = {};
+  const countedResponses = new Map();
   for (const raw of state.snapshots) {
     const snapshot = projectSnapshot(raw, state);
     for (const device of snapshot?.inventory?.devices ?? []) {
@@ -734,14 +774,33 @@ function buildPresence(state) {
         lastSeenAt: raw.observedAt,
         observationCount: 0,
         currentlyObserved: false,
+        firstRetrievedAt: raw.observedAt,
+        lastRetrievedAt: raw.observedAt,
+        firstResponseAt: null,
+        lastResponseAt: null,
+        responseCount: 0,
       };
       if (raw.observedAt < record.firstSeenAt) record.firstSeenAt = raw.observedAt;
       if (raw.observedAt > record.lastSeenAt) record.lastSeenAt = raw.observedAt;
       record.observationCount += 1;
+      record.firstRetrievedAt = record.firstSeenAt;
+      record.lastRetrievedAt = record.lastSeenAt;
+      const responses = countedResponses.get(device.id) ?? new Set();
+      for (const response of device.observation.responses) {
+        const key = `${response.method}:${response.address}:${response.port ?? ""}:${response.respondedAt ?? raw.id}`;
+        if (responses.has(key)) continue;
+        responses.add(key);
+        record.responseCount += 1;
+        if (response.respondedAt) {
+          record.firstResponseAt = [record.firstResponseAt, response.respondedAt].filter(Boolean).sort()[0];
+          record.lastResponseAt = latestTime([record.lastResponseAt, response.respondedAt]);
+        }
+      }
+      countedResponses.set(device.id, responses);
       presence[device.id] = record;
     }
   }
-  const currentIds = new Set(projectSnapshot(composeCurrentSnapshot(state.snapshots), state)?.inventory?.devices.map((item) => item.id) ?? []);
+  const currentIds = new Set(projectSnapshot(composeCurrentSnapshot(state.snapshots), state)?.inventory?.devices.filter((item) => item.observation.responses.length).map((item) => item.id) ?? []);
   for (const [id, record] of Object.entries(presence)) record.currentlyObserved = currentIds.has(id);
   return presence;
 }
@@ -822,6 +881,12 @@ function buildInterfaceControls(snapshot, settings) {
   })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function confirmedEndpointTime(snapshot, endpoint) {
+  return endpoint.observedAt ?? latestTime((snapshot.evidence ?? [])
+    .filter((record) => endpoint.evidenceIds?.includes(record.id))
+    .map((record) => record.sourceObservedAt ?? record.observedAt));
+}
+
 function buildTcpServiceObservation(state, currentSnapshot = null) {
   const raw = [...state.snapshots].reverse().find((snapshot) => snapshot.tcpServices?.method === "tcp-connect");
   if (!raw) return null;
@@ -859,10 +924,10 @@ function buildTcpServiceObservation(state, currentSnapshot = null) {
       added: changes.added.map(enrich),
       removed: changes.removed.map(enrich),
     },
-    endpoints: (raw.tcpServices.endpoints ?? []).map((endpoint) => ({
+    endpoints: (projected.tcpServices.endpoints ?? []).map((endpoint) => ({
       ...enrich(endpoint),
-      observedAt: raw.observedAt,
-      change: changes.comparable ? (added.has(endpointKey(endpoint, "tcp")) ? "new" : "unchanged") : "baseline",
+      observedAt: confirmedEndpointTime(projected, endpoint),
+      change: endpoint.snapshotId !== raw.id ? "baseline" : changes.comparable ? (added.has(endpointKey(endpoint, "tcp")) ? "new" : "unchanged") : "baseline",
     })),
     closedEndpoints,
   };
@@ -907,10 +972,10 @@ function buildUdpServiceObservation(state, currentSnapshot = null) {
       added: changes.added.map(enrich),
       removed: changes.removed.map(enrich),
     },
-    endpoints: (raw.udpServices.endpoints ?? []).map((endpoint) => ({
+    endpoints: (projected.udpServices.endpoints ?? []).map((endpoint) => ({
       ...enrich(endpoint),
-      observedAt: raw.observedAt,
-      change: changes.comparable ? (added.has(endpointKey(endpoint, "udp")) ? "new" : "unchanged") : "baseline",
+      observedAt: confirmedEndpointTime(projected, endpoint),
+      change: endpoint.snapshotId !== raw.id ? "baseline" : changes.comparable ? (added.has(endpointKey(endpoint, "udp")) ? "new" : "unchanged") : "baseline",
     })),
     closedEndpoints,
     uncertainEndpoints: (raw.udpServices.uncertainEndpoints ?? []).map((endpoint) => ({

@@ -38,6 +38,7 @@ const state = {
   portProtocol: "all",
   portState: "confirmed",
   pendingDatabaseImport: null,
+  epoch: 0,
 };
 
 const dom = Object.fromEntries(
@@ -51,7 +52,7 @@ const dom = Object.fromEntries(
     "drawer-ports-section", "drawer-port-count", "drawer-ports", "drawer-port-changes", "drawer-port-uncertain", "drawer-open-ports",
     "drawer-identity-section", "drawer-identity-copy", "drawer-use-suggested-name", "drawer-apply-recommended-split", "drawer-actions-section", "drawer-actions-copy", "drawer-rescan-tcp", "drawer-rescan-udp", "drawer-export-target",
     "drawer-evidence", "loading-overlay", "loading-title", "loading-subtitle", "graph-caption",
-    "zoom-in", "zoom-out", "zoom-level", "reset-viewport", "inventory-body", "evidence-count", "evidence-summary", "evidence-ledger", "change-list", "scope-list",
+    "zoom-in", "zoom-out", "zoom-level", "reset-viewport", "inventory-body", "candidate-inventory-body", "candidate-count", "refresh-sources", "evidence-count", "evidence-summary", "evidence-ledger", "change-list", "scope-list",
     "scan-dialog", "scan-form", "scan-profile", "scan-cidr", "confirm-scan", "scan-progress", "cancel-scan", "toast", "map-section",
     "scan-status", "scan-status-title", "scan-status-percent", "scan-status-message", "global-scan-progress", "scan-status-target", "scan-status-count", "scan-status-results", "scan-status-elapsed", "global-cancel-scan",
     "service-dialog", "service-form", "service-cidr", "service-preset", "service-preset-description", "service-custom-ports", "service-scan-summary", "confirm-service-scan",
@@ -82,10 +83,12 @@ function configureRuntime() {
 }
 
 async function loadState() {
+  const epoch = state.epoch;
   dom["load-error"].classList.add("hidden");
   setLoading(true, "Loading observations", "Reading the local evidence store.");
   try {
     const [payload, history, database] = await Promise.all([api("/api/state"), api("/api/history"), api("/api/database")]);
+    if (epoch !== state.epoch) return;
     payload.database = database.summary;
     payload.maxDatabaseImportBytes = database.maxImportBytes;
     state.history = history;
@@ -95,6 +98,7 @@ async function loadState() {
       await resumeScan(payload.activeScan);
     }
   } catch (error) {
+    if (epoch !== state.epoch) return;
     if (runtime.kind === "static") {
       dom["load-error-message"].textContent = error.message;
       dom["load-error"].classList.remove("hidden");
@@ -103,7 +107,7 @@ async function loadState() {
       showToast(error.message, true);
     }
   } finally {
-    if (!state.scanning) setLoading(false);
+    if (epoch === state.epoch && !state.scanning) setLoading(false);
   }
 }
 
@@ -122,8 +126,11 @@ function renderAll() {
   const { snapshot, topology, diff, demo } = state.payload;
   dom["probe-host"].textContent = snapshot?.hostname ?? "Unknown";
   dom["probe-mode"].textContent = profileLabel(snapshot?.profile ?? "passive");
+  const lastCheck = snapshot?.observationChecks?.at(-1);
   dom["last-seen"].textContent = snapshot
-    ? `Observed ${relativeTime(snapshot.observedAt)} · ${formatDate(snapshot.observedAt)}`
+    ? lastCheck
+      ? `Last completed check: ${lastCheck.method} · ${formatDate(lastCheck.retrievedAt)} · Facts retrieved ${relativeTime(snapshot.observedAt)}`
+      : `Facts retrieved ${formatDate(snapshot.observedAt)} · No device check yet`
     : "No observations saved";
   dom["demo-banner"].classList.toggle("hidden", !demo);
 
@@ -134,7 +141,7 @@ function renderAll() {
     : "";
 
   const backedLinks = topology.links.filter((link) => link.confidence !== "weak").length;
-  dom["stat-devices"].textContent = state.payload.inventory?.devices?.length ?? topology.nodes.filter((node) => node.kind === "device").length;
+  dom["stat-devices"].textContent = state.payload.inventory?.devices?.filter((device) => device.observation?.kind !== "candidate").length ?? topology.nodes.filter((node) => node.kind === "device").length;
   dom["stat-networks"].textContent = state.payload.inventory?.networks?.length ?? topology.nodes.filter((node) => node.kind === "network").length;
   dom["stat-links"].textContent = backedLinks;
   dom["stat-weak"].textContent = topology.confidenceCounts.weak ?? 0;
@@ -180,8 +187,10 @@ function databasePreviewText(summary, fileName) {
 
 async function refreshAutomation() {
   if (!state.payload) return;
+  const epoch = state.epoch;
   try {
     const automation = await api("/api/automation");
+    if (epoch !== state.epoch) return;
     state.payload.serviceSchedules = automation.schedules;
     state.payload.notifications = automation.notifications;
     renderAutomation(automation.schedules, automation.notifications);
@@ -193,8 +202,10 @@ async function refreshAutomation() {
 
 async function refreshDatabase() {
   if (!state.payload) return;
+  const epoch = state.epoch;
   try {
     const database = await api("/api/database");
+    if (epoch !== state.epoch) return;
     state.payload.database = database.summary;
     state.payload.maxDatabaseImportBytes = database.maxImportBytes;
     renderDatabase(database.summary);
@@ -511,9 +522,14 @@ function openDetail(item, kind) {
   if (kind === "node" && state.payload.presence?.[item.id]) {
     const presence = state.payload.presence[item.id];
     const extra = {
-      "First seen": formatDate(presence.firstSeenAt),
-      "Last seen": formatDate(presence.lastSeenAt),
-      "Observations": presence.observationCount,
+      "First retrieved": formatDate(presence.firstRetrievedAt ?? presence.firstSeenAt),
+      "Last retrieved": formatDate(presence.lastRetrievedAt ?? presence.lastSeenAt),
+      "Source observation": device?.observation?.sourceObservedAt ? formatDate(device.observation.sourceObservedAt) : "Unknown",
+      "Last direct response": presence.lastResponseAt ? formatDate(presence.lastResponseAt) : "Unconfirmed",
+      "Direct confirmations": presence.responseCount ?? 0,
+      "API records retrieved": device?.registrationRetrievedAt ? formatDate(device.registrationRetrievedAt) : "Not available",
+      "API reported conditions": device?.reportedConditions?.map((condition) => `${condition.type}: ${condition.status} · heartbeat ${condition.lastHeartbeatTime ?? "unknown"}`).join("; ") || "Not available",
+      "Responding addresses": device?.observation?.responses.map((item) => `${item.address}${item.port ? `:${item.port}` : ""} · ${item.method} · ${item.respondedAt ? formatDate(item.respondedAt) : "Unknown time"}`).join("; ") || "None",
     };
     for (const [key, value] of Object.entries(extra)) {
       const row = element("div");
@@ -597,11 +613,11 @@ function renderInventory(inventory) {
   dom["identity-review-summary"].textContent = reviewCount
     ? `${reviewCount} identit${reviewCount === 1 ? "y" : "ies"} need review`
     : "No identity conflicts detected";
-  dom["inventory-body"].replaceChildren(
-    ...devices.map((device) => {
+  const rows = devices.map((device) => {
       const addresses = assignments.filter((item) => item.deviceId === device.id).map((item) => item.address);
       const mac = interfaces.find((item) => item.deviceId === device.id && item.mac)?.mac;
       const row = document.createElement("tr");
+      row.dataset.candidate = String(device.observation?.kind === "candidate");
       row.classList.toggle("identity-review-row", device.needsIdentityReview);
       const name = element("span", "inventory-device-name");
       name.append(
@@ -638,14 +654,16 @@ function renderInventory(inventory) {
       actionCell.append(action);
       row.append(actionCell);
       return row;
-    }),
-  );
+    });
+  dom["inventory-body"].replaceChildren(...rows.filter((row) => row.dataset.candidate !== "true"));
+  dom["candidate-inventory-body"].replaceChildren(...rows.filter((row) => row.dataset.candidate === "true"));
+  dom["candidate-count"].textContent = devices.filter((device) => device.observation?.kind === "candidate").length;
 }
 
 function renderOpenPorts(tcpObservation, udpObservation) {
   const confirmed = [
-    ...(tcpObservation?.endpoints ?? []).map((endpoint) => ({ ...endpoint, protocol: "tcp", state: "open", observedAt: tcpObservation.observedAt })),
-    ...(udpObservation?.endpoints ?? []).map((endpoint) => ({ ...endpoint, protocol: "udp", state: "open", observedAt: udpObservation.observedAt })),
+    ...(tcpObservation?.endpoints ?? []).map((endpoint) => ({ ...endpoint, protocol: "tcp", state: "open" })),
+    ...(udpObservation?.endpoints ?? []).map((endpoint) => ({ ...endpoint, protocol: "udp", state: "open" })),
   ];
   const uncertain = (udpObservation?.uncertainEndpoints ?? []).map((endpoint) => ({ ...endpoint, protocol: "udp", observedAt: udpObservation.observedAt }));
   const changed = [
@@ -916,8 +934,9 @@ function renderEvidence(evidence) {
 function evidenceLedgerRow(entry) {
   const row = element("article", "ledger-row");
   const time = document.createElement("time");
-  time.dateTime = entry.observedAt;
-  time.textContent = formatDate(entry.observedAt);
+  const retrievedAt = entry.retrievedAt ?? entry.observedAt;
+  time.dateTime = retrievedAt ?? "";
+  time.textContent = `Retrieved ${retrievedAt ? formatDate(retrievedAt) : "unknown"} · Source time ${entry.sourceObservedAt ? formatDate(entry.sourceObservedAt) : "unknown"}`;
   const source = element("span");
   source.textContent = `${entry.source} / ${entry.type}`;
   const summary = element("p");
@@ -995,7 +1014,7 @@ function renderSources(sources, interfaces) {
     card.append(
       heading,
       textElement("p", source.message || "No status detail"),
-      textElement("small", `${source.recordCount ?? 0} records · Observed: ${source.lastObservedAt ? freshnessLabel(source.lastObservedAt) : "never"} · Last success: ${source.lastSuccessfulAt ? relativeTime(source.lastSuccessfulAt) : "never"}`),
+      textElement("small", `${source.recordCount ?? 0} records · Retrieved: ${source.lastObservedAt ? freshnessLabel(source.lastObservedAt) : "never"} · Last successful fetch: ${source.lastSuccessfulAt ? relativeTime(source.lastSuccessfulAt) : "never"}. Fetch success does not confirm device reachability.`),
     );
     return card;
   }));
@@ -1071,14 +1090,17 @@ function renderHistory() {
 }
 
 async function compareHistory() {
+  const epoch = state.epoch;
   try {
     const result = await api(`/api/compare?from=${encodeURIComponent(dom["history-from"].value)}&to=${encodeURIComponent(dom["history-to"].value)}`);
+    if (epoch !== state.epoch) return;
     const events = result.diff.events ?? [];
     dom["history-result"].replaceChildren(
       textElement("strong", `${events.length} meaningful changes`),
       ...(events.length ? events.map((event) => textElement("p", event.summary)) : [textElement("p", "No identity, address, service, or topology changes were found.")]),
     );
   } catch (error) {
+    if (epoch !== state.epoch) return;
     showToast(error.message, true);
   }
 }
@@ -1320,13 +1342,14 @@ function bindEvents() {
   dom["database-file"].addEventListener("change", previewDatabaseFile);
   dom["database-import"].addEventListener("click", importDatabase);
   dom["database-reset"].addEventListener("click", resetDatabase);
-  dom["database-collect-facts"].addEventListener("click", () => runScan("passive"));
+  dom["database-collect-facts"].addEventListener("click", () => runScan("local"));
   dom["drawer-rescan-tcp"].addEventListener("click", () => rescanSelectedAddress("tcp"));
   dom["drawer-rescan-udp"].addEventListener("click", () => rescanSelectedAddress("udp"));
   dom["drawer-export-target"].addEventListener("click", exportSelectedTargetCsv);
   dom["graph-empty-deep"].addEventListener("click", openDeepScanDialog);
   dom["graph-empty-sources"].addEventListener("click", () => switchSection("sources"));
-  dom["passive-scan"].addEventListener("click", () => runScan("passive"));
+  dom["passive-scan"].addEventListener("click", () => runScan("local"));
+  dom["refresh-sources"].addEventListener("click", () => runScan("passive"));
   dom["open-scan-dialog"].addEventListener("click", () => dom["scan-dialog"].showModal());
   dom["open-service-dialog"].addEventListener("click", () => dom["service-dialog"].showModal());
   dom["open-udp-dialog"].addEventListener("click", () => dom["udp-dialog"].showModal());
@@ -1403,6 +1426,7 @@ function bindEvents() {
 }
 
 async function previewDatabaseFile(event) {
+  const epoch = state.epoch;
   const file = event.target.files?.[0];
   event.target.value = "";
   state.pendingDatabaseImport = null;
@@ -1421,11 +1445,14 @@ async function previewDatabaseFile(event) {
   dom["database-import-preview"].textContent = `Validating ${file.name}…`;
   try {
     const database = JSON.parse(await file.text());
+    if (epoch !== state.epoch) return;
     const preview = await api("/api/database/import/preview", { method: "POST", body: { database } });
+    if (epoch !== state.epoch) return;
     state.pendingDatabaseImport = database;
     dom["database-import-preview"].textContent = databasePreviewText(preview.summary, file.name);
     disableControl(dom["database-import"], state.scanning);
   } catch (error) {
+    if (epoch !== state.epoch) return;
     dom["database-import-preview"].textContent = `Cannot import this file: ${error.message}`;
     dom["database-import-preview"].classList.add("invalid");
   }
@@ -1434,6 +1461,7 @@ async function previewDatabaseFile(event) {
 async function importDatabase() {
   if (!state.pendingDatabaseImport || state.scanning) return;
   if (!window.confirm("Replace the current Boushun database with the validated file? A local backup of the current database will be created first.")) return;
+  invalidatePendingViews();
   disableControl(dom["database-import"], true);
   disableControl(dom["database-reset"], true);
   setLoading(true, "Importing database", "Creating a backup, then replacing the local state.");
@@ -1459,7 +1487,7 @@ async function importDatabase() {
 
 async function resetDatabase() {
   if (state.scanning) return;
-  const confirmation = window.prompt("This removes every saved observation and Boushun UI setting. Type RESET to continue.");
+  const confirmation = window.prompt("This removes observations, history, manual edits, layout, interface settings, schedules, and notifications. A local recovery backup is retained. External source files and the OS cache are unchanged. Type RESET to continue.");
   if (confirmation !== "RESET") {
     if (confirmation !== null) showToast("Database reset cancelled: confirmation did not match.", true);
     return;
@@ -1467,6 +1495,7 @@ async function resetDatabase() {
   disableControl(dom["database-import"], true);
   disableControl(dom["database-reset"], true);
   setLoading(true, "Resetting database", "Creating a backup, then clearing the local state.");
+  invalidatePendingViews();
   try {
     const result = await api("/api/database/reset", { method: "POST", body: { confirmation: "RESET" } });
     state.pendingDatabaseImport = null;
@@ -1474,7 +1503,7 @@ async function resetDatabase() {
     dom["database-import-preview"].textContent = `Reset complete. Pre-reset backup: ${result.backup}`;
     await loadState();
     switchSection("database");
-    showToast("Database reset. Collect local facts to restore scan ranges; the previous database was backed up locally.");
+    showToast("Database reset. Load local configuration to choose scan ranges. A recovery backup was retained.");
   } catch (error) {
     showToast(error.message, true);
   } finally {
@@ -1482,6 +1511,12 @@ async function resetDatabase() {
     disableControl(dom["database-reset"], state.scanning);
     disableControl(dom["database-import"], state.scanning || !state.pendingDatabaseImport);
   }
+}
+
+function invalidatePendingViews() {
+  state.epoch += 1;
+  state.selected = null;
+  dom["detail-drawer"].classList.add("hidden");
 }
 
 function openDeepScanDialog() {
@@ -1633,14 +1668,17 @@ async function resumeScan(job) {
 }
 
 async function pollScan(id) {
+  const epoch = state.epoch;
   for (;;) {
     const { job } = await api(`/api/scans/${encodeURIComponent(id)}`);
+    if (epoch !== state.epoch) return;
     renderScanStatus(job);
     dom["loading-title"].textContent = phaseTitle(job.progress?.phase);
     dom["loading-subtitle"].textContent = job.progress?.message || `${job.progress?.completed ?? 0}/${job.progress?.total ?? 0}`;
     dom["scan-progress"].value = job.progress?.percent ?? 0;
     if (job.status === "completed") {
       const [payload, history, database] = await Promise.all([api("/api/state"), api("/api/history"), api("/api/database")]);
+      if (epoch !== state.epoch) return;
       payload.database = database.summary;
       payload.maxDatabaseImportBytes = database.maxImportBytes;
       state.history = history;
@@ -1650,7 +1688,11 @@ async function pollScan(id) {
         ? "TCP service discovery completed."
         : job.input?.kind === "udp-services"
           ? "UDP service discovery completed. Confirmed and uncertain results are separated."
-          : "Network observation completed.");
+          : job.input?.profile === "local"
+            ? "Local configuration loaded. Device confirmation has not been performed."
+            : job.input?.profile === "passive"
+              ? "Sources retrieved. Cached candidates are unconfirmed."
+              : `Check completed: ${payload.snapshot?.scan?.responsiveCount ?? 0} responses, ${Math.max(0, (payload.snapshot?.scan?.targetCount ?? 0) - (payload.snapshot?.scan?.responsiveCount ?? 0))} unconfirmed. No response does not mean offline.`);
       return;
     }
     if (job.status === "cancelled") {
@@ -1825,6 +1867,7 @@ function updateScanButtonLabels(job) {
 }
 
 function scanKindLabel(input = {}) {
+  if (input.profile === "local") return "Local configuration";
   if (input.kind === "tcp-services") return "TCP service discovery";
   if (input.kind === "udp-services") return "UDP service discovery";
   if (input.profile === "passive") return "Passive refresh";
@@ -1881,6 +1924,7 @@ function presetLabel(value) {
 
 function toggleScanButtons(disabled) {
   disableControl(dom["passive-scan"], disabled);
+  disableControl(dom["refresh-sources"], disabled);
   disableControl(dom["open-scan-dialog"], disabled || !(state.payload?.snapshot?.scanCandidates?.length));
   disableControl(dom["open-service-dialog"], disabled || !(state.payload?.snapshot?.scanCandidates?.length));
   disableControl(dom["open-udp-dialog"], disabled || !(state.payload?.snapshot?.scanCandidates?.length));
@@ -1920,6 +1964,7 @@ function exportSvg() {
   style.textContent = `
     svg{background:#0b1714}.graph-edge{fill:none;stroke-width:2}.verified{stroke:#6ee7b7}.strong{stroke:#79b8ff}.inferred{stroke:#f5c66b;stroke-dasharray:7 5}.weak{stroke:#667d74;stroke-dasharray:2 7}.graph-edge-hit{display:none}.node-card{fill:#12241f;stroke:#49645a}.node-icon-bg{fill:#17352c;stroke:#5b927e}.node-icon-text{fill:#9af2cf;font:800 10px sans-serif;text-anchor:middle;dominant-baseline:central}.node-title{fill:#edf7f2;font:650 11.5px sans-serif}.node-subtitle{fill:#789187;font:8.5px sans-serif}.edge-label{fill:#789187;font:9px sans-serif;text-anchor:middle}.node-status{stroke:#10201c;stroke-width:2}.node-status.online{fill:#6ee7b7}.node-status.recent{fill:#f5c66b}.node-status.unknown{fill:#647b72}.dimmed{opacity:1}`;
   clone.prepend(style);
+  style.textContent += ".node-status.responded{fill:#6ee7b7}.node-status.registered{fill:#f5c66b}.node-status.configured{fill:#f08f86}.node-status.unconfirmed{fill:#647b72}";
   downloadBlob(new Blob([new XMLSerializer().serializeToString(clone)], { type: "image/svg+xml" }), `boushun-${Date.now()}.svg`);
 }
 

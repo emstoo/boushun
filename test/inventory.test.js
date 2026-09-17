@@ -54,7 +54,7 @@ test("[INV-08] a TCP response creates a service and an inferred device even with
   const inventory = buildInventory(snapshot);
   const device = inventory.devices.find((item) => item.id === "device:ip:192.168.50.222");
   const service = inventory.services.find((item) => item.id === "service:tcp:192.168.50.222:8080");
-  assert.equal(device.status, "online");
+  assert.equal(device.status, "responded");
   assert.equal(device.sourceKinds.includes("tcp-connect"), true);
   assert.equal(service.kind, "tcp-service");
   const topology = buildTopology({ ...snapshot, inventory }, { view: "services" });
