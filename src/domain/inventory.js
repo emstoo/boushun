@@ -19,7 +19,11 @@ export function buildInventory(snapshot, overrides = EMPTY_OVERRIDES, settings =
   const services = new Map();
   const networks = new Map();
 
-  const rawDevices = [...(snapshot.devices ?? [])];
+  const rawDevices = (snapshot.devices ?? []).map((device) => ({
+    ...device,
+    addresses: [...(device.addresses ?? [])],
+    evidenceIds: [...(device.evidenceIds ?? [])],
+  }));
   const knownAddresses = new Set(rawDevices.flatMap((item) => item.addresses ?? []));
   for (const response of currentResponses(observationChecks(snapshot))) {
     if (knownAddresses.has(response.address)) continue;
@@ -28,9 +32,17 @@ export function buildInventory(snapshot, overrides = EMPTY_OVERRIDES, settings =
       evidenceIds: response.evidenceIds, identityConfidence: "inferred" });
   }
   for (const node of snapshot.kubernetes?.nodes ?? []) {
-    if (node.addresses?.some((address) => knownAddresses.has(address)) || !node.addresses?.length) continue;
-    rawDevices.push({ id: `device:kubernetes:${safeId(node.name)}`, name: node.name, addresses: node.addresses,
-      source: "kubernetes-api", role: "kubernetes-node", evidenceIds: node.evidenceIds, identityConfidence: "verified" });
+    if (!node.addresses?.length) continue;
+    const existing = rawDevices.find((device) => device.addresses.some((address) => node.addresses.includes(address)));
+    if (existing) {
+      // Extend the matched identity without taking addresses from other devices.
+      const missing = node.addresses.filter((address) => !knownAddresses.has(address));
+      existing.addresses = unique([...existing.addresses, ...missing]);
+      existing.evidenceIds = unique([...(existing.evidenceIds ?? []), ...(node.evidenceIds ?? [])]);
+    } else {
+      rawDevices.push({ id: `device:kubernetes:${safeId(node.name)}`, name: node.name, addresses: unique(node.addresses),
+        source: "kubernetes-api", role: "kubernetes-node", evidenceIds: node.evidenceIds, identityConfidence: "verified" });
+    }
     node.addresses.forEach((address) => knownAddresses.add(address));
   }
   for (const raw of rawDevices) {

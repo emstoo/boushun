@@ -192,6 +192,9 @@ Fixtures include an unchanged STALE neighbor, REACHABLE/PERMANENT/NOARP entries,
 | INV-15 | P1 | Merge 2 to 20 devices | Move device, interface, assignment, and advertiser references consistently to the target |
 | INV-16 | P1 | Apply a manual or recommended split | Move only selected addresses to the new device/interface and keep source/audit state consistent |
 | INV-17 | P1 | Submit an invalid merge/split or request an unavailable recommendation | Reject without changing state or audit records |
+| INV-18 | P0 | Local refresh changes the probe IP from `192.168.50.10` to `.20` after earlier active observations | Current self configuration contains only `.20` and the latest interfaces/routes/ranges. Other devices retain their response evidence; historical self configuration and raw snapshots remain unchanged |
+| INV-19 | P1 | Load local configuration after DNS/DHCP records, then explicitly refresh Passive sources | Local loading retains DNS/DHCP data together with their original source status, snapshot ID, and time. The next Passive update replaces both data and source provenance, including a successful empty result |
+| INV-20 | P1 | Kubernetes reports a Node with known `.2` and missing `.3` addresses, including duplicates | Add the missing address to the existing device with API evidence, without duplicate identities/assignments or mutating raw snapshots. Both addresses remain registered without a direct response time |
 
 ### 5.7 Topology, diffs, history, and layout
 

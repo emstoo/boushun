@@ -40,7 +40,7 @@ export function composeCurrentSnapshot(snapshots = []) {
   const devices = mergeDevices(stampedDevices(base), uniqueSnapshots([facts, icmp, deep, ...respondingSnapshots]).flatMap(stampedDevices));
   const discovery = {
     ...(base.discovery ?? {}),
-    dhcp: base.discovery?.dhcp ?? [],
+    dhcp: facts?.discovery?.dhcp ?? [],
     mdns: deep?.discovery?.mdns ?? [],
     ssdp: deep?.discovery?.ssdp ?? [],
   };
@@ -54,6 +54,7 @@ export function composeCurrentSnapshot(snapshots = []) {
     profile: "current",
     sourceProfile: base.profile,
     devices,
+    resolver: facts?.resolver ?? [],
     kubernetes: nodeSource || serviceSource ? {
       ...(base.kubernetes ?? facts?.kubernetes),
       nodes: nodeSource?.kubernetes.nodes ?? [],
@@ -141,7 +142,10 @@ function composeSummary(summary, icmp, tcp, udp) {
 function mergeDevices(baseDevices, enrichmentDevices) {
   const devices = baseDevices.map(cloneDevice);
   for (const candidate of enrichmentDevices) {
+    // Local configuration belongs exclusively to the latest snapshot.
+    if (candidate.id === "device:self") continue;
     const current = findMatchingDevice(devices, candidate);
+    if (current?.id === "device:self") continue;
     if (!current) {
       devices.push(cloneDevice(candidate));
       continue;
