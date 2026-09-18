@@ -59,6 +59,25 @@ test("[MTL-04, MTL-05, MTL-06] a split MAC remains separate projected branches",
   assert.deepEqual(timeline.entries[0].branches.find((branch) => branch.deviceId === "device:manual:camera").addresses, ["192.168.50.41"]);
 });
 
+test("[MTL-06] a merge target stays stable when snapshots contain one member at a time", () => {
+  const sourceId = "device:merge:source";
+  const targetId = "device:merge:target";
+  const snapshots = [
+    snapshot("2026-09-05T00:00:00.000Z", [{ id: sourceId, addresses: ["192.168.50.40"], mac: MAC, name: "Source" }]),
+    snapshot("2026-09-06T00:00:00.000Z", [{ id: targetId, addresses: ["192.168.50.41"], mac: MAC, name: "Target" }]),
+  ];
+  const overrides = {
+    devices: {}, splits: [], audit: [],
+    merges: [{ sourceIds: [targetId, sourceId], targetId, name: "Merged device" }],
+  };
+  const timeline = buildMacTimeline(snapshots, MAC, overrides);
+
+  assert.deepEqual(timeline.entries.map((entry) => entry.branches.map((branch) => branch.deviceId)), [[targetId], [targetId]]);
+  assert.equal(timeline.summary.branchCount, 1);
+  assert.equal(timeline.summary.needsIdentityReview, false);
+  assert.equal(timeline.entries[1].branches[0].changesSincePreviousObservation.previousObservedAt, "2026-09-05T00:00:00.000Z");
+});
+
 test("[MTL-10, MTL-14] index and detail expose bounded retained-history metadata", () => {
   const snapshots = [snapshot("2026-09-02T00:00:00.000Z", [{ id: `device:mac:${MAC}`, addresses: ["192.168.50.41"], mac: MAC, name: "Camera" }])];
   const index = buildMacTimelineIndex(snapshots, {}, {}, { maximumSnapshotCount: 10 });

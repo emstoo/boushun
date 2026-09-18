@@ -470,7 +470,7 @@ function applyDeviceOverrides(rawOverrides, devices) {
 function applyMerges(merges, { devices, interfaces, assignments }) {
   for (const merge of Array.isArray(merges) ? merges : []) {
     const sourceIds = unique(merge?.sourceIds ?? []).filter((id) => devices.has(id));
-    if (sourceIds.length < 2) continue;
+    if (!sourceIds.length) continue;
     const targetId = merge.targetId || sourceIds[0];
     const members = sourceIds.map((id) => devices.get(id));
     const target = devices.get(targetId) ?? { ...members[0], id: targetId };

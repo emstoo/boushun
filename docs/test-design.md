@@ -231,7 +231,7 @@ Fixtures include an unchanged STALE neighbor, REACHABLE/PERMANENT/NOARP entries,
 | MTL-08 | P0 | The selected MAC is absent from one or more snapshots | Connectivity state remains unknown for the missing observation points |
 | MTL-09 | P1 | A direct ICMP, TCP, UDP, SNMPv3, mDNS, or SSDP response belongs to a matching address | Method, address, optional port, evidence IDs, and original response time remain scoped and deduplicated |
 | MTL-10 | P1 | Request an empty index, unknown valid MAC, invalid MAC, and populated timeline | Return the documented read-only empty, `404`, `400`, and success contracts |
-| MTL-11 | P1 | Open the feature from History and from an Inventory device | Both paths select the same canonical MAC and render the same data |
+| MTL-11 | P1 | Open the feature from History and Inventory, then edit or clear the selector | Both paths select the same canonical MAC and render the same data; compact and hyphenated input is normalized, while incomplete and unmatched input clears the previous result and shows the query state |
 | MTL-12 | P1 | Use keyboard navigation, narrow viewport, and identity warnings | Controls remain operable and all meanings are conveyed through text and focus in addition to color and hover |
 | MTL-13 | P0 | Build and load the public static fixture | Only synthetic MAC data is captured; timeline GETs work without a live API and mutations remain disabled |
 | MTL-14 | P1 | Retained history reaches the configured maximum | Results remain bounded and label the oldest timestamp as retained history rather than complete lifetime history |

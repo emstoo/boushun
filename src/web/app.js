@@ -38,6 +38,7 @@ const state = {
   macTimelineIndex: null,
   macTimeline: null,
   selectedMac: null,
+  macTimelineQuery: "",
   macTimelineLoading: false,
   macTimelineError: null,
   portSearch: "",
@@ -1131,14 +1132,14 @@ async function loadMacTimelineIndex() {
   try {
     state.macTimelineIndex = await api("/api/mac-timelines");
     if (epoch !== state.epoch) return;
-    if (state.selectedMac && state.macTimelineIndex.items.some((item) => item.mac === state.selectedMac)) {
-      await loadMacTimeline(state.selectedMac);
+    const requestedMac = state.selectedMac ?? normalizeMacTimelineInput(state.macTimelineQuery);
+    if (requestedMac && state.macTimelineIndex.items.some((item) => item.mac === requestedMac)) {
+      await loadMacTimeline(requestedMac);
       return;
     }
     if (state.selectedMac) {
       state.selectedMac = null;
       state.macTimeline = null;
-      dom["mac-timeline-selector"].value = "";
     }
   } catch (error) {
     if (epoch !== state.epoch) return;
@@ -1155,6 +1156,7 @@ async function loadMacTimelineIndex() {
 async function loadMacTimeline(mac) {
   const epoch = state.epoch;
   state.selectedMac = mac;
+  state.macTimelineQuery = mac;
   state.macTimeline = null;
   state.macTimelineLoading = true;
   state.macTimelineError = null;
@@ -1209,7 +1211,12 @@ function renderMacTimeline() {
     return;
   }
   if (!state.selectedMac) {
-    dom["mac-timeline-status"].textContent = "Choose a MAC to inspect its retained observations. Connectivity remains unknown for snapshots without this MAC.";
+    const queriedMac = normalizeMacTimelineInput(state.macTimelineQuery);
+    dom["mac-timeline-status"].textContent = state.macTimelineQuery
+      ? queriedMac
+        ? `No retained history was found for ${queriedMac}.`
+        : "Enter a complete MAC address or choose a retained device."
+      : "Choose a MAC to inspect its retained observations. Connectivity remains unknown for snapshots without this MAC.";
     return;
   }
   if (!state.macTimeline) {
@@ -1299,6 +1306,15 @@ function macBranchChanges(changes) {
 
 function formatOptionalDate(value, fallback = "Not available") {
   return value ? formatDate(value) : fallback;
+}
+
+function normalizeMacTimelineInput(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  const canonical = /^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(normalized);
+  const hyphenated = /^(?:[0-9a-f]{2}-){5}[0-9a-f]{2}$/.test(normalized);
+  const compact = /^[0-9a-f]{12}$/.test(normalized);
+  if (!canonical && !hyphenated && !compact) return null;
+  return normalized.replaceAll(":", "").replaceAll("-", "").match(/.{2}/g).join(":");
 }
 
 async function compareHistory() {
@@ -1538,6 +1554,7 @@ function bindEvents() {
     if (!mac) return;
     closeDrawer();
     state.selectedMac = mac;
+    state.macTimelineQuery = mac;
     state.macTimeline = null;
     dom["mac-timeline-selector"].value = mac;
     switchSection("history");
@@ -1630,9 +1647,21 @@ function bindEvents() {
   dom["history-observations-tab"].addEventListener("click", () => setHistoryView("observations"));
   dom["history-mac-tab"].addEventListener("click", () => setHistoryView("mac"));
   dom["mac-timeline-selector"].addEventListener("input", (event) => {
-    const value = event.target.value.trim().toLowerCase();
-    const match = state.macTimelineIndex?.items.find((item) => item.mac === value);
-    if (match && match.mac !== state.selectedMac) void loadMacTimeline(match.mac);
+    const value = event.target.value.trim();
+    const canonicalMac = normalizeMacTimelineInput(value);
+    state.macTimelineQuery = canonicalMac ?? value;
+    if (canonicalMac) event.target.value = canonicalMac;
+    const match = state.macTimelineIndex?.items.find((item) => item.mac === canonicalMac);
+    if (match) {
+      if (match.mac !== state.selectedMac || (!state.macTimeline && !state.macTimelineLoading)) void loadMacTimeline(match.mac);
+      else renderMacTimeline();
+      return;
+    }
+    state.selectedMac = null;
+    state.macTimeline = null;
+    state.macTimelineError = null;
+    if (state.macTimelineIndex) state.macTimelineLoading = false;
+    renderMacTimeline();
   });
   dom["device-editor"].addEventListener("submit", saveDeviceOverride);
   dom["merge-device"].addEventListener("click", mergeSelectedDevice);
