@@ -135,6 +135,34 @@ test("[INV-16] a split after a merge applies in audit order", () => {
   assert.equal(inventory.ipAssignments.find((assignment) => assignment.address === "192.168.50.30").deviceId, "device:nas");
 });
 
+test("[INV-16] persistent operation order survives audit truncation", () => {
+  const snapshot = collectDemo();
+  const merge = {
+    id: "merge:persistent-order",
+    sequence: 1,
+    sourceIds: ["device:nas", "device:camera"],
+    targetId: "device:nas",
+  };
+  const split = {
+    id: "split:persistent-order",
+    sequence: 2,
+    sourceId: "device:nas",
+    targetId: "device:camera-split",
+    addresses: ["192.168.50.41"],
+    name: "camera-split.demo.test",
+  };
+  const inventory = buildInventory(snapshot, {
+    devices: {}, merges: [merge], splits: [split],
+    audit: Array.from({ length: 500 }, (_, index) => ({ action: "device.override", details: { id: `device:${index}` } })),
+  });
+
+  assert.equal(
+    inventory.ipAssignments.find((assignment) => assignment.address === "192.168.50.41").deviceId,
+    "device:camera-split",
+  );
+  assert.equal(inventory.ipAssignments.find((assignment) => assignment.address === "192.168.50.30").deviceId, "device:nas");
+});
+
 test("[TOP-07] neighbor state churn is not a meaningful change", () => {
   const before = collectDemo();
   const after = structuredClone(before);

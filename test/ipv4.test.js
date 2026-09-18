@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   assertSafeScanCIDR,
+  containsCIDR,
   containsIPv4,
   hostAddresses,
   parseCIDR,
@@ -23,6 +24,10 @@ test("[NET-01, NET-02] IPv4 and CIDR parsing returns canonical facts and rejects
   assert.equal(cidr.last, "192.168.50.254");
   assert.equal(containsIPv4(cidr, "192.168.50.99"), true);
   assert.equal(containsIPv4(cidr, "192.168.12.1"), false);
+  assert.equal(containsCIDR(cidr, "192.168.50.30/32"), true);
+  assert.equal(containsCIDR("192.168.50.30/32", cidr), false);
+  assert.equal(containsCIDR(cidr, "192.168.51.0/24"), false);
+  assert.equal(containsCIDR(cidr, "invalid"), false);
 });
 
 test("[NET-03, NET-04, NET-05] scan safety rejects broad, non-local, and partially allowed ranges", () => {

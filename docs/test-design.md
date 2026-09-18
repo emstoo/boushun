@@ -97,7 +97,7 @@ Fixtures include an unchanged STALE neighbor, REACHABLE/PERMANENT/NOARP entries,
 | NET-02 | P0 | Provide missing octets, non-digits, octets above 255, missing prefixes, or prefixes above 32 | Input is rejected before reaching any scan operation |
 | NET-03 | P0 | Request a range broader than `/24` | Request is rejected as too broad and sends zero packets |
 | NET-04 | P0 | Request public, loopback, or mixed private/public ranges | Anything outside private or link-local IPv4 is rejected |
-| NET-05 | P0 | Request a range inside, equal to, outside, or partially overlapping an allowed CIDR; omit, empty, or malform the allowlist | Only fully contained ranges with a valid nonempty allowlist are accepted; invalid configuration sends no probes |
+| NET-05 | P0 | Request a range inside, equal to, outside, or partially overlapping an allowed CIDR; omit, empty, or malform the allowlist | Only fully contained ranges with a valid nonempty allowlist are accepted and remain eligible when narrower than the interface CIDR; invalid configuration sends no probes |
 | NET-06 | P0 | Enumerate an ordinary subnet | Network and broadcast are excluded; each usable address appears once |
 | NET-07 | P1 | Enumerate `/31` and `/32` | All addresses defined as usable by the product are returned without overflow or an infinite loop |
 | NET-08 | P1 | Exclude a local address | Only the selected address is excluded; order and remaining addresses are preserved |
@@ -190,7 +190,7 @@ Fixtures include an unchanged STALE neighbor, REACHABLE/PERMANENT/NOARP entries,
 | INV-13 | P1 | Identity is address-only | Provide an informational issue and suggested name without claiming strong identity |
 | INV-14 | P1 | Save manual name, role, and tags | Change only the projection, preserve raw observations, and append an audit record |
 | INV-15 | P1 | Merge 2 to 20 devices | Move device, interface, assignment, and advertiser references consistently to the target |
-| INV-16 | P1 | Apply a manual or recommended split | Move only selected addresses to the new device/interface and keep source/audit state consistent |
+| INV-16 | P1 | Apply manual/recommended splits before or after merges, then truncate the audit log | Move only selected addresses to the new device/interface and preserve merge/split application order independently of audit retention |
 | INV-17 | P1 | Submit an invalid merge/split or request an unavailable recommendation | Reject without changing state or audit records |
 | INV-18 | P0 | Local refresh changes the probe IP from `192.168.50.10` to `.20` after earlier active observations | Current self configuration contains only `.20` and the latest interfaces/routes/ranges. Other devices retain their response evidence; historical self configuration and raw snapshots remain unchanged |
 | INV-19 | P1 | Load local configuration after DNS/DHCP records, then explicitly refresh Passive sources | Local loading retains DNS/DHCP data together with their original source status, snapshot ID, and time. The next Passive update replaces both data and source provenance, including a successful empty result |
@@ -312,7 +312,7 @@ The HTTP endpoint and response-header requirements here apply to the local Boush
 | UI-10 | P1 | Drag nodes, pan, zoom by wheel/buttons, and reset | Avoid accidental clicks and keep pinning separate from viewport movement |
 | UI-11 | P1 | Override, merge, split, or apply a recommended split | Refresh projection and audit after confirmation while preserving raw evidence |
 | UI-12 | P1 | Run target `/32` TCP/UDP rescans and target CSV export | Limit operation to the selected device/VIP/address without broadening to the network |
-| UI-13 | P1 | Toggle map/identity/scan policy for an interface | Reflect saved controls in candidates, inventory, and map according to each policy |
+| UI-13 | P1 | Toggle map/identity/scan policy for an interface whose eligible candidate is equal to or narrower than its CIDR | Reflect saved controls in candidates, inventory, and map according to each policy without dropping contained narrower candidates |
 | UI-14 | P1 | Compare arbitrary history entries | Associate semantic events with the selected snapshot metadata |
 | UI-15 | P0 | Preview→IMPORT, RESET, and database failure paths | Preview is non-mutating; confirmation and active-scan gates are explicit; failures remain recoverable |
 | UI-16 | P1 | Create/update/delete/run/toggle schedules and read notifications | Keep API state, badges, and lists synchronized without double submission |

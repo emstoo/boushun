@@ -1,4 +1,5 @@
 import { containsIPv4 } from "./ipv4.js";
+import { orderedIdentityOperations } from "./identity-operations.js";
 import { resolveInterfacePolicy } from "./interface-policy.js";
 import { annotateObservations, currentResponses, observationChecks } from "./observation.js";
 
@@ -490,39 +491,10 @@ function applyMerges(merges, { devices, interfaces, assignments }) {
 }
 
 function applyIdentityOperations(overrides, projection) {
-  const merges = Array.isArray(overrides?.merges) ? overrides.merges : [];
-  const splits = Array.isArray(overrides?.splits) ? overrides.splits : [];
-  const mergeById = new Map(merges.map((operation) => [operation.id, operation]));
-  const splitById = new Map(splits.map((operation) => [operation.id, operation]));
-  const appliedMerges = new Set();
-  const appliedSplits = new Set();
-
-  for (const audit of Array.isArray(overrides?.audit) ? overrides.audit : []) {
-    if (audit.action === "device.merge") {
-      const operation = mergeById.get(audit.details?.id);
-      if (operation) {
-        applyMerges([operation], projection);
-        appliedMerges.add(operation.id);
-      }
-    } else if (audit.action === "device.split") {
-      const operation = splitById.get(audit.details?.id);
-      if (operation) {
-        applySplits([operation], projection);
-        appliedSplits.add(operation.id);
-      }
-    } else if (audit.action === "device.recommended-split") {
-      for (const detail of audit.details?.splits ?? []) {
-        const operation = splitById.get(detail.id);
-        if (!operation) continue;
-        applySplits([operation], projection);
-        appliedSplits.add(operation.id);
-      }
-    }
+  for (const { kind, operation } of orderedIdentityOperations(overrides)) {
+    if (kind === "merge") applyMerges([operation], projection);
+    else applySplits([operation], projection);
   }
-
-  // Version-1/early-version-2 files may have operations without audit entries.
-  applySplits(splits.filter((operation) => !appliedSplits.has(operation.id)), projection);
-  applyMerges(merges.filter((operation) => !appliedMerges.has(operation.id)), projection);
 }
 
 function applySplits(splits, { devices, interfaces, assignments }) {

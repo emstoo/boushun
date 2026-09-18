@@ -1,5 +1,6 @@
 import { chmod, mkdir, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { orderedIdentityOperations } from "../domain/identity-operations.js";
 
 const EMPTY_OVERRIDES = Object.freeze({ devices: {}, merges: [], splits: [], audit: [] });
 const EMPTY_STATE = Object.freeze({ version: 2, snapshots: [], layout: {}, overrides: EMPTY_OVERRIDES, settings: { interfaces: {}, serviceSchedules: [] }, notifications: [] });
@@ -135,7 +136,7 @@ export class JsonStore {
   async saveMerge(input, actor = "local-user") {
     return this.#enqueue(async () => {
       const state = await this.#readUnqueued();
-      const merge = sanitizeMerge(input);
+      const merge = { ...sanitizeMerge(input), sequence: nextIdentityOperationSequence(state.overrides) };
       state.overrides.merges.push(merge);
       appendAudit(state, actor, "device.merge", merge);
       await this.#write(state);
@@ -146,7 +147,7 @@ export class JsonStore {
   async saveSplit(input, actor = "local-user") {
     return this.#enqueue(async () => {
       const state = await this.#readUnqueued();
-      const split = sanitizeSplit(input);
+      const split = { ...sanitizeSplit(input), sequence: nextIdentityOperationSequence(state.overrides) };
       state.overrides.splits.push(split);
       appendAudit(state, actor, "device.split", split);
       await this.#write(state);
@@ -159,6 +160,9 @@ export class JsonStore {
       const state = await this.#readUnqueued();
       const splits = (Array.isArray(inputs) ? inputs : []).map(sanitizeSplit);
       if (!splits.length || splits.length > 253) throw badRequest("A split batch requires between 1 and 253 entries");
+      const firstSequence = nextIdentityOperationSequence(state.overrides);
+      if (!Number.isSafeInteger(firstSequence + splits.length - 1)) throw badRequest("Too many identity operations");
+      splits.forEach((split, index) => { split.sequence = firstSequence + index; });
       state.overrides.splits.push(...splits);
       appendAudit(state, actor, "device.recommended-split", { splits });
       await this.#write(state);
@@ -402,14 +406,15 @@ function assertOptionalRecord(owner, key, context) {
 
 function normalizeState(state) {
   const overrides = state?.overrides && typeof state.overrides === "object" ? state.overrides : {};
+  const identityOperations = normalizeIdentityOperations(overrides);
   return {
     version: 2,
     snapshots: Array.isArray(state?.snapshots) ? state.snapshots : [],
     layout: state?.layout && typeof state.layout === "object" ? state.layout : {},
     overrides: {
       devices: overrides.devices && typeof overrides.devices === "object" ? overrides.devices : {},
-      merges: Array.isArray(overrides.merges) ? overrides.merges : [],
-      splits: Array.isArray(overrides.splits) ? overrides.splits : [],
+      merges: identityOperations.merges,
+      splits: identityOperations.splits,
       audit: Array.isArray(overrides.audit) ? overrides.audit.slice(-500) : [],
     },
     settings: {
@@ -531,6 +536,28 @@ function sanitizeSplit(input) {
     name: typeof input.name === "string" ? input.name.trim().slice(0, 120) : undefined,
     role: typeof input.role === "string" ? input.role.trim().slice(0, 60) : undefined,
   };
+}
+
+function normalizeIdentityOperations(overrides) {
+  const merges = Array.isArray(overrides.merges)
+    ? overrides.merges.map((operation) => isRecord(operation) ? { ...operation } : operation)
+    : [];
+  const splits = Array.isArray(overrides.splits)
+    ? overrides.splits.map((operation) => isRecord(operation) ? { ...operation } : operation)
+    : [];
+  const normalized = { ...overrides, merges, splits };
+  orderedIdentityOperations(normalized).forEach(({ operation }, index) => {
+    operation.sequence = index + 1;
+  });
+  return { merges, splits };
+}
+
+function nextIdentityOperationSequence(overrides) {
+  const highest = [...overrides.merges, ...overrides.splits].reduce((maximum, operation) =>
+    Number.isSafeInteger(operation?.sequence) && operation.sequence > maximum ? operation.sequence : maximum, 0);
+  const next = highest + 1;
+  if (!Number.isSafeInteger(next)) throw badRequest("Too many identity operations");
+  return next;
 }
 
 function appendAudit(state, actor, action, details) {

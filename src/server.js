@@ -10,7 +10,7 @@ import { composeCurrentSnapshot } from "./domain/current-state.js";
 import { withInventory } from "./domain/inventory.js";
 import { latestTime } from "./domain/observation.js";
 import { resolveInterfacePolicy } from "./domain/interface-policy.js";
-import { assertSafeScanCIDR } from "./domain/ipv4.js";
+import { assertSafeScanCIDR, containsCIDR } from "./domain/ipv4.js";
 import { buildMacTimeline, buildMacTimelineIndex, isValidMacTimelineInput } from "./domain/mac-timeline.js";
 import { buildComparableServiceChanges, endpointKey } from "./domain/service-observation.js";
 import { ScanManager } from "./scan/scan-manager.js";
@@ -777,14 +777,15 @@ function requestError(message) {
 
 function projectSnapshot(snapshot, state) {
   if (!snapshot) return null;
-  const scannableCIDRs = new Set((snapshot.interfaces ?? []).flatMap((networkInterface) =>
+  const scannableCIDRs = (snapshot.interfaces ?? []).flatMap((networkInterface) =>
     resolveInterfacePolicy(networkInterface.name, networkInterface.state, state.settings).scan
       ? (networkInterface.addresses ?? []).map((address) => address.cidr).filter(Boolean)
       : [],
-  ));
+  );
   return {
     ...withInventory(snapshot, state.overrides, state.settings),
-    scanCandidates: (snapshot.scanCandidates ?? []).filter((cidr) => scannableCIDRs.has(cidr)),
+    scanCandidates: (snapshot.scanCandidates ?? []).filter((cidr) =>
+      scannableCIDRs.some((interfaceCIDR) => containsCIDR(interfaceCIDR, cidr))),
   };
 }
 

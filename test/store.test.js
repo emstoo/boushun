@@ -48,6 +48,48 @@ test("[DB-05] v1 state migrates on the next mutation and manual overrides are au
   assert.equal(JSON.parse(await readFile(path.join(directory, "state.json"), "utf8")).version, 2);
 });
 
+test("[INV-16] identity operation order migrates and persists independently of retained audit", async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "boushun-identity-order-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const merge = { id: "merge:legacy", sourceIds: ["device:nas", "device:camera"], targetId: "device:nas" };
+  const split = { id: "split:legacy", sourceId: "device:nas", targetId: "device:camera-split", addresses: ["192.168.50.41"] };
+  const audit = [
+    { id: "audit:merge", action: "device.merge", details: merge },
+    { id: "audit:split", action: "device.split", details: split },
+    ...Array.from({ length: 498 }, (_, index) => ({ id: `audit:filler:${index}`, action: "device.override", details: {} })),
+  ];
+  await writeFile(path.join(directory, "state.json"), JSON.stringify({
+    version: 2,
+    snapshots: [],
+    layout: {},
+    overrides: { devices: {}, merges: [merge], splits: [split], audit },
+    settings: { interfaces: {}, serviceSchedules: [] },
+    notifications: [],
+  }), { mode: 0o600 });
+
+  const store = new JsonStore(directory);
+  await store.initialize();
+  assert.deepEqual((await store.read()).overrides.merges.map((operation) => operation.sequence), [1]);
+  assert.deepEqual((await store.read()).overrides.splits.map((operation) => operation.sequence), [2]);
+
+  await store.saveDeviceOverride("device:first", { name: "first" });
+  await store.saveDeviceOverride("device:second", { name: "second" });
+  const persisted = JSON.parse(await readFile(path.join(directory, "state.json"), "utf8"));
+  assert.equal(persisted.overrides.audit.some((entry) => entry.action === "device.merge" || entry.action === "device.split"), false);
+  assert.deepEqual(persisted.overrides.merges.map((operation) => operation.sequence), [1]);
+  assert.deepEqual(persisted.overrides.splits.map((operation) => operation.sequence), [2]);
+
+  const savedMerge = await store.saveMerge({ sourceIds: ["device:a", "device:b"], targetId: "device:a" });
+  const savedSplit = await store.saveSplit({ sourceId: "device:a", targetId: "device:c", addresses: ["192.168.50.10"] });
+  const savedBatch = await store.saveSplitBatch([
+    { sourceId: "device:a", targetId: "device:d", addresses: ["192.168.50.11"] },
+    { sourceId: "device:a", targetId: "device:e", addresses: ["192.168.50.12"] },
+  ]);
+  assert.equal(savedMerge.merge.sequence, 3);
+  assert.equal(savedSplit.split.sequence, 4);
+  assert.deepEqual(savedBatch.splits.map((operation) => operation.sequence), [5, 6]);
+});
+
 test("[TOP-14] layout persistence drops invalid IDs and coordinates and normalizes valid positions", async (t) => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "boushun-layout-validation-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
