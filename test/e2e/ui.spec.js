@@ -40,7 +40,7 @@ test("[UI-01, UI-02] synthetic demo exposes every primary screen", async ({ page
 test("[MTL-11, MTL-12] MAC history is searchable from History and reachable from Inventory", async ({ page }) => {
   await openDemo(page);
   await page.locator('.nav-item[data-section="history"]').click();
-  await page.getByRole("button", { name: "Devices by MAC" }).click();
+  await page.getByLabel("History view").selectOption("mac");
   await page.locator("#mac-timeline-selector").fill("02:00:00:00:00:30");
   await expect(page.locator("#mac-timeline-summary")).toContainText("storage.demo.test");
   await expect(page.locator("#mac-timeline-summary")).toContainText("Locally administered");
@@ -70,7 +70,7 @@ test("[MTL-11, MTL-12] MAC history is searchable from History and reachable from
   await expect(page.locator("#drawer-mac-timeline")).toBeVisible();
   await page.locator("#drawer-mac-timeline").click();
   await expect(page.locator("#history-section")).toBeVisible();
-  await expect(page.locator("#history-mac-tab")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("History view")).toHaveValue("mac");
   await expect(page.locator("#mac-timeline-selector")).toHaveValue("02:00:00:00:00:30");
   await expect(page.locator("#mac-timeline-summary")).toContainText("storage.demo.test");
 });

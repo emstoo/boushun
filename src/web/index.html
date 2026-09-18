@@ -382,10 +382,13 @@
         <section class="panel history-panel hidden" id="history-section">
           <div class="panel-header">
             <div><p class="section-kicker">Saved observations</p><h2>History timeline</h2></div>
-            <div class="history-view-tabs" role="group" aria-label="History view">
-              <button class="button secondary active" id="history-observations-tab" type="button" aria-pressed="true">Observations</button>
-              <button class="button secondary" id="history-mac-tab" type="button" aria-pressed="false">Devices by MAC</button>
-            </div>
+            <label class="select-field history-view-select">
+              <span>History view</span>
+              <select id="history-view">
+                <option value="observations">Observation timeline</option>
+                <option value="mac">Device timeline by MAC address</option>
+              </select>
+            </label>
           </div>
           <div id="history-observations-view">
             <div class="history-compare">

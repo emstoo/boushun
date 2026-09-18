@@ -75,7 +75,7 @@ test("[RST-05, MTL-11] reset invalidates a delayed MAC timeline index request", 
   });
 
   await page.locator('.nav-item[data-section="history"]').click();
-  await page.getByRole("button", { name: "Devices by MAC" }).click();
+  await page.getByLabel("History view").selectOption("mac");
   await waiting;
   await expect(page.locator("#mac-timeline-status")).toContainText("Loading retained MAC history");
 

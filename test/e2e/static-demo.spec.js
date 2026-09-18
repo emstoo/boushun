@@ -194,7 +194,7 @@ test("[UI-21, UI-22, DEP-08] Pages static demo renders read-only from the projec
   expect(await readFile(inventoryDownloadPath, "utf8")).toContain("storage.demo.test");
 
   await page.locator('.nav-item[data-section="history"]').click();
-  await page.getByRole("button", { name: "Devices by MAC" }).click();
+  await page.getByLabel("History view").selectOption("mac");
   await page.locator("#mac-timeline-selector").fill("02:00:00:00:00:30");
   await expect(page.locator("#mac-timeline-summary")).toContainText("storage.demo.test");
   await expect(page.locator("#mac-timeline-list .mac-timeline-entry")).toHaveCount(1);

@@ -67,7 +67,7 @@ const dom = Object.fromEntries(
     "ports-result-caption", "ports-empty", "ports-empty-title", "ports-empty-copy", "ports-empty-tcp", "ports-empty-udp", "ports-table-wrap", "ports-body", "export-ports-csv", "port-stat-new", "port-stat-closed",
     "udp-dialog", "udp-form", "udp-cidr", "udp-preset", "udp-preset-description", "udp-custom-ports", "udp-scan-summary", "confirm-udp-scan",
     "inventory-section", "evidence-section", "sources-section", "source-summary", "source-grid", "interface-body",
-    "history-section", "history-observations-tab", "history-mac-tab", "history-observations-view", "history-mac-view", "history-from", "history-to", "compare-history", "history-result", "history-timeline", "mac-timeline-selector", "mac-timeline-options", "mac-timeline-status", "mac-timeline-summary", "mac-timeline-list", "map-companion",
+    "history-section", "history-view", "history-observations-view", "history-mac-view", "history-from", "history-to", "compare-history", "history-result", "history-timeline", "mac-timeline-selector", "mac-timeline-options", "mac-timeline-status", "mac-timeline-summary", "mac-timeline-list", "map-companion",
     "device-editor", "device-name", "device-role", "device-tags", "merge-device", "split-device", "identity-review-summary", "export-inventory-csv",
     "automation-section", "automation-summary", "automation-nav-badge", "schedule-form", "schedule-protocol", "schedule-cidr", "schedule-preset", "schedule-custom-ports", "schedule-interval", "schedule-list",
     "notification-list", "mark-notifications-read",
@@ -1107,10 +1107,7 @@ function renderHistory() {
 
 function renderHistoryView() {
   const macView = state.historyView === "mac";
-  dom["history-observations-tab"].classList.toggle("active", !macView);
-  dom["history-observations-tab"].setAttribute("aria-pressed", String(!macView));
-  dom["history-mac-tab"].classList.toggle("active", macView);
-  dom["history-mac-tab"].setAttribute("aria-pressed", String(macView));
+  dom["history-view"].value = state.historyView;
   dom["history-observations-view"].classList.toggle("hidden", macView);
   dom["history-mac-view"].classList.toggle("hidden", !macView);
   if (!macView) return;
@@ -1645,8 +1642,7 @@ function bindEvents() {
   dom["cancel-scan"].addEventListener("click", cancelScan);
   dom["global-cancel-scan"].addEventListener("click", cancelScan);
   dom["compare-history"].addEventListener("click", compareHistory);
-  dom["history-observations-tab"].addEventListener("click", () => setHistoryView("observations"));
-  dom["history-mac-tab"].addEventListener("click", () => setHistoryView("mac"));
+  dom["history-view"].addEventListener("change", (event) => setHistoryView(event.target.value));
   dom["mac-timeline-selector"].addEventListener("input", (event) => {
     const value = event.target.value.trim();
     const canonicalMac = normalizeMacTimelineInput(value);
