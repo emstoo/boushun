@@ -55,3 +55,39 @@ test("[RST-05] reset ignores delayed pre-reset automation and clears selected de
   await expect(page.locator("#schedule-list")).not.toContainText("192.168.50.2");
   await expect(page.locator(".graph-node")).toHaveCount(0);
 });
+
+test("[RST-05, MTL-11] reset invalidates a delayed MAC timeline index request", async ({ page }) => {
+  await page.clock.setFixedTime(demo.demoTime);
+  await page.goto(demo.baseURL);
+  let release;
+  let entered;
+  let requestCount = 0;
+  const blocked = new Promise((resolve) => { release = resolve; });
+  const waiting = new Promise((resolve) => { entered = resolve; });
+  await page.route("**/api/mac-timelines", async (route) => {
+    requestCount += 1;
+    const response = await route.fetch();
+    if (requestCount === 1) {
+      entered();
+      await blocked;
+    }
+    await route.fulfill({ response });
+  });
+
+  await page.locator('.nav-item[data-section="history"]').click();
+  await page.getByRole("button", { name: "Devices by MAC" }).click();
+  await waiting;
+  await expect(page.locator("#mac-timeline-status")).toContainText("Loading retained MAC history");
+
+  await page.locator('.nav-item[data-section="database"]').click();
+  page.once("dialog", (dialog) => dialog.accept("RESET"));
+  await page.locator("#database-reset").click();
+  await expect(page.locator("#database-empty-status")).toBeVisible();
+
+  const delivered = page.waitForResponse("**/api/mac-timelines");
+  release();
+  await delivered;
+  await page.locator('.nav-item[data-section="history"]').click();
+  await expect.poll(() => requestCount).toBe(2);
+  await expect(page.locator("#mac-timeline-status")).toContainText("No observations are saved");
+});

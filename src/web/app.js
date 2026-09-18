@@ -1130,8 +1130,9 @@ async function loadMacTimelineIndex() {
   state.macTimelineError = null;
   renderMacTimeline();
   try {
-    state.macTimelineIndex = await api("/api/mac-timelines");
+    const index = await api("/api/mac-timelines");
     if (epoch !== state.epoch) return;
+    state.macTimelineIndex = index;
     const requestedMac = state.selectedMac ?? normalizeMacTimelineInput(state.macTimelineQuery);
     if (requestedMac && state.macTimelineIndex.items.some((item) => item.mac === requestedMac)) {
       await loadMacTimeline(requestedMac);
@@ -1775,6 +1776,7 @@ async function resetDatabase() {
 function invalidatePendingViews() {
   state.epoch += 1;
   state.selected = null;
+  state.macTimelineLoading = false;
   dom["detail-drawer"].classList.add("hidden");
 }
 
