@@ -776,7 +776,16 @@ function requestError(message) {
 }
 
 function projectSnapshot(snapshot, state) {
-  return withInventory(snapshot, state.overrides, state.settings);
+  if (!snapshot) return null;
+  const scannableCIDRs = new Set((snapshot.interfaces ?? []).flatMap((networkInterface) =>
+    resolveInterfacePolicy(networkInterface.name, networkInterface.state, state.settings).scan
+      ? (networkInterface.addresses ?? []).map((address) => address.cidr).filter(Boolean)
+      : [],
+  ));
+  return {
+    ...withInventory(snapshot, state.overrides, state.settings),
+    scanCandidates: (snapshot.scanCandidates ?? []).filter((cidr) => scannableCIDRs.has(cidr)),
+  };
 }
 
 function snapshotMetadata(snapshot) {

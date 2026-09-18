@@ -566,6 +566,7 @@ function sanitizeLayout(layout) {
   for (const [id, position] of Object.entries(layout)) {
     if (
       typeof id === "string" &&
+      id.length > 0 &&
       id.length <= 200 &&
       Number.isFinite(position?.x) &&
       Number.isFinite(position?.y)

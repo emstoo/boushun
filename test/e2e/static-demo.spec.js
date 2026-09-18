@@ -55,7 +55,7 @@ for (const [name, response, message] of [
   ["temporarily unavailable", { status: 503, body: "Unavailable" }, /Unable to load static demo fixture/],
   ["malformed", { status: 200, json: { readOnly: false, routes: {} } }, /Invalid static demo fixture/],
 ]) {
-  test(`static demo keeps mutations disabled when its fixture is ${name}`, async ({ page }) => {
+  test(`[UI-23] static demo keeps mutations disabled when its fixture is ${name}`, async ({ page }) => {
     const apiRequests = [];
     page.on("request", (request) => {
       if (new URL(request.url()).pathname.includes("/api/")) apiRequests.push(request.url());
@@ -80,7 +80,7 @@ for (const [name, response, message] of [
   });
 }
 
-test("static demo exits loading after a stalled fixture and recovers on reload", async ({ page }) => {
+test("[UI-23] static demo exits loading after a stalled fixture and recovers on reload", async ({ page }) => {
   await page.clock.install();
   const requested = page.waitForRequest("**/demo-fixture.json");
   await page.route("**/demo-fixture.json", () => {});

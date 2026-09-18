@@ -47,3 +47,43 @@ test("[TOP-04, INV-11] services view collapses internal-only services", () => {
   assert.equal(topology.nodes.some((node) => node.label === "dns"), false);
   assert.equal(topology.groups[0].items[0].label, "dns");
 });
+
+test("[TOP-03] logical topology connects membership, VIP, advertiser, default route, and Internet", () => {
+  const snapshot = collectDemo();
+  snapshot.devices.find((device) => device.id === "device:router").addresses.push("192.168.50.99");
+  snapshot.kubernetes = {
+    nodes: [],
+    services: [{
+      name: "web",
+      namespace: "default",
+      kind: "kubernetes-loadbalancer",
+      addresses: ["192.168.50.99"],
+      clusterAddresses: ["10.96.0.10"],
+      ports: [{ protocol: "TCP", port: 443 }],
+      evidenceIds: ["evidence:k8s:service"],
+    }],
+  };
+  const topology = buildTopology(snapshot, { view: "logical" });
+
+  assert.ok(topology.nodes.some((node) => node.id === "network:internet"));
+  assert.ok(topology.nodes.some((node) => node.id === "ip:192.168.50.99" && node.role === "vip"));
+  for (const relation of ["address-membership", "virtual-address", "advertised-by", "default-route"]) {
+    assert.ok(topology.links.some((link) => link.relation === relation), relation);
+  }
+});
+
+test("[TOP-05] topology removes duplicate links and links with missing endpoints", () => {
+  const snapshot = collectDemo();
+  const valid = structuredClone(snapshot.explicitLinks[0]);
+  snapshot.explicitLinks.push(
+    structuredClone(valid),
+    { id: "link:missing", source: "device:router", target: "device:missing", relation: "physical-or-l2", confidence: "verified", evidenceIds: [] },
+  );
+  const topology = buildTopology(snapshot, { view: "logical" });
+
+  assert.equal(topology.nodes.length, new Set(topology.nodes.map((node) => node.id)).size);
+  assert.equal(topology.links.filter((link) => link.id === valid.id).length, 1);
+  assert.equal(topology.links.some((link) => link.id === "link:missing"), false);
+  assert.ok(topology.links.every((link) => topology.nodes.some((node) => node.id === link.source)
+    && topology.nodes.some((node) => node.id === link.target)));
+});

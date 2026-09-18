@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { buildStaticDemo } from "../scripts/build-static-demo.js";
 
-test("static demo build captures projected synthetic API responses and exports", async () => {
+test("[MTL-13] static demo build captures projected synthetic API responses and exports", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "boushun-static-demo-test-"));
   const outputDirectory = path.join(root, "site");
   const fixedTime = new Date("2030-01-02T03:04:05.000Z");

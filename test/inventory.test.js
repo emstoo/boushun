@@ -63,6 +63,78 @@ test("[INV-04, INV-16] manual split changes the projection without changing raw 
   assert.equal(inventory.ipAssignments.find((item) => item.address === "192.168.50.102").deviceId, "device:manual:phone");
 });
 
+test("[INV-05] real scanner interfaces replace synthetic addresses and omit loopback", () => {
+  const snapshot = collectDemo();
+  const scanner = snapshot.devices.find((item) => item.id === "device:self");
+  scanner.addresses = ["192.168.50.250"];
+  scanner.interface = "synthetic0";
+  snapshot.interfaces = [
+    { name: "lo", state: "UP", addresses: [{ address: "127.0.0.1", cidr: "127.0.0.0/8" }] },
+    { name: "eth0", state: "UP", mac: scanner.mac, addresses: [{ address: "192.168.50.200", cidr: "192.168.50.0/24", evidenceId: "evidence:local" }] },
+  ];
+  const inventory = buildInventory(snapshot);
+  const projected = inventory.devices.find((item) => item.id === "device:self");
+
+  assert.deepEqual(projected.interfaceIds, ["interface:self:eth0"]);
+  assert.deepEqual(
+    inventory.ipAssignments.filter((item) => item.deviceId === projected.id).map((item) => item.address),
+    ["192.168.50.200"],
+  );
+  assert.equal(inventory.interfaces.some((item) => item.name === "lo" || item.name === "synthetic0"), false);
+});
+
+test("[INV-15] merge rewrites device, interface, assignment, and advertiser references without changing raw data", () => {
+  const snapshot = collectDemo();
+  const laptop = snapshot.devices.find((item) => item.id === "device:laptop");
+  laptop.addresses.push("192.168.50.99");
+  snapshot.kubernetes = {
+    nodes: [],
+    services: [{
+      name: "merged-vip",
+      namespace: "default",
+      kind: "kubernetes-loadbalancer",
+      addresses: ["192.168.50.99"],
+      clusterAddresses: [],
+      ports: [{ protocol: "TCP", port: 443 }],
+      evidenceIds: ["evidence:vip"],
+    }],
+  };
+  const original = structuredClone(snapshot);
+  const inventory = buildInventory(snapshot, {
+    devices: {}, splits: [], audit: [],
+    merges: [{ sourceIds: ["device:router", "device:laptop"], targetId: "device:router", name: "Merged edge" }],
+  });
+  const merged = inventory.devices.find((item) => item.id === "device:router");
+
+  assert.equal(merged.name, "Merged edge");
+  assert.equal(inventory.devices.some((item) => item.id === "device:laptop"), false);
+  assert.ok(inventory.interfaces.filter((item) => merged.interfaceIds.includes(item.id)).every((item) => item.deviceId === merged.id));
+  assert.ok(inventory.ipAssignments
+    .filter((item) => merged.ipAssignmentIds.includes(item.id) && item.kind !== "vip")
+    .every((item) => item.deviceId === merged.id));
+  const vip = inventory.ipAssignments.find((item) => item.address === "192.168.50.99");
+  assert.equal(vip.deviceId, null);
+  assert.deepEqual(vip.advertisedByDeviceIds, [merged.id]);
+  assert.deepEqual(snapshot, original);
+});
+
+test("[INV-16] a split after a merge applies in audit order", () => {
+  const snapshot = collectDemo();
+  const merge = { id: "merge:ordered", sourceIds: ["device:nas", "device:camera"], targetId: "device:nas" };
+  const split = { id: "split:ordered", sourceId: "device:nas", targetId: "device:camera-split", addresses: ["192.168.50.41"], name: "camera-split.demo.test" };
+  const inventory = buildInventory(snapshot, {
+    devices: {}, merges: [merge], splits: [split],
+    audit: [
+      { action: "device.merge", details: merge },
+      { action: "device.split", details: split },
+    ],
+  });
+  const target = inventory.devices.find((device) => device.id === "device:camera-split");
+  assert.equal(target.name, "camera-split.demo.test");
+  assert.equal(inventory.ipAssignments.find((assignment) => assignment.address === "192.168.50.41").deviceId, target.id);
+  assert.equal(inventory.ipAssignments.find((assignment) => assignment.address === "192.168.50.30").deviceId, "device:nas");
+});
+
 test("[TOP-07] neighbor state churn is not a meaningful change", () => {
   const before = collectDemo();
   const after = structuredClone(before);
@@ -79,7 +151,7 @@ test("[INV-06, INV-07] interface identity and map policies suppress virtual-netw
   assert.equal(inventory.devices.some((item) => item.id === "device:virtual"), false);
 });
 
-test("[INV-08] a TCP response creates a service and an inferred device even without ICMP or neighbor evidence", () => {
+test("[INV-08, INV-13] a TCP response creates an address-only service identity with review guidance", () => {
   const snapshot = collectDemo();
   snapshot.tcpServices = { endpoints: [{ address: "192.168.50.222", port: 8080, protocol: "tcp", service: "http-alt", evidenceIds: ["evidence:tcp"] }] };
   const inventory = buildInventory(snapshot);
@@ -87,6 +159,10 @@ test("[INV-08] a TCP response creates a service and an inferred device even with
   const service = inventory.services.find((item) => item.id === "service:tcp:192.168.50.222:8080");
   assert.equal(device.status, "responded");
   assert.equal(device.sourceKinds.includes("tcp-connect"), true);
+  assert.equal(device.identityConfidence, "inferred");
+  assert.equal(device.identityIssues[0].code, "address-only-identity");
+  assert.equal(device.identityIssues[0].severity, "info");
+  assert.match(device.suggestedName, /192\.168\.50\.222/);
   assert.equal(service.kind, "tcp-service");
   const topology = buildTopology({ ...snapshot, inventory }, { view: "services" });
   assert.ok(topology.links.some((item) => item.relation === "hosts" && item.source === device.id));

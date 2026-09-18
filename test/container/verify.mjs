@@ -7,6 +7,7 @@ const run = promisify(execFile);
 const base = "http://127.0.0.1:45177";
 const phase = process.argv[2];
 const positions = { "device:self": { x: 123, y: 456 } };
+const protectedMarker = "BOUSHUN_SYNTHETIC_PROTECTED_INPUT_7f9b";
 const api = async (endpoint, method = "GET", body) => {
   const response = await fetch(`${base}/api/${endpoint}`, {
     method, headers: { "content-type": "application/json" },
@@ -34,6 +35,7 @@ if (phase === "before" || phase === "reset-after") {
   assert.deepEqual((await api("state")).inventory.devices.map((device) => device.id), ["device:self"]);
 }
 const state = await api("state");
+assert.ok(!JSON.stringify(await api("database/export")).includes(protectedMarker));
 assert.equal(state.sourceHealth.find((source) => source.id === "local-network")?.status, "connected");
 assert.ok(state.snapshot.interfaces.some((item) => item.name === "boushun0"
   && item.addresses.some((address) => address.address === "192.168.50.1")));

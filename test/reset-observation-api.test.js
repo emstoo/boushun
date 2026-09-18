@@ -18,7 +18,7 @@ async function serve(t, options) {
     post: (url, body) => fetch(base + url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }) };
 }
 
-test("[RST-01, RST-02, RST-03] reset survives restart without collection or demo reseeding", async (t) => {
+test("[RST-01, RST-02, RST-03, DB-14] reset survives restart without collection or demo reseeding", async (t) => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "boushun-reset-restart-"));
   let collections = 0;
   const collector = async () => { collections += 1; return collectDemo(); };
@@ -75,7 +75,7 @@ test("[RST-04] a request suspended before scan admission cannot survive a reset"
   assert.equal((await app.get("/api/database")).summary.snapshots, 0);
 });
 
-test("[OBS-10, OBS-11] cache retrieval never advances response presence and exports agree", async (t) => {
+test("[OBS-10, OBS-11, TOP-11] cache retrieval never advances response presence and exports agree", async (t) => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "boushun-presence-times-"));
   const app = await serve(t, { dataDirectory: directory, collector: async () => { throw new Error("Unexpected collection"); } });
   const first = "2026-09-17T01:00:00.000Z";

@@ -94,6 +94,50 @@ test("[MTL-10, MTL-14] index and detail expose bounded retained-history metadata
   assert.equal(buildMacTimeline(snapshots, "02:00:00:00:00:42"), null);
 });
 
+test("[MTL-09] timeline scopes and deduplicates every direct response method", () => {
+  const raw = snapshot("2026-09-07T00:00:00.000Z", [{
+    id: `device:mac:${MAC}`, addresses: ["192.168.50.41"], mac: MAC, name: "Camera",
+  }], {
+    observationChecks: [
+      {
+        method: "icmp-echo", snapshotId: "responses", retrievedAt: "2026-09-07T00:00:00.000Z",
+        responses: [
+          { method: "icmp-echo", address: "192.168.50.41", respondedAt: "2026-09-07T00:00:01.000Z", evidenceIds: ["evidence:icmp"] },
+          { method: "icmp-echo", address: "192.168.50.41", respondedAt: "2026-09-07T00:00:01.000Z", evidenceIds: ["evidence:icmp"] },
+        ],
+      },
+      ...["snmpv3", "mdns", "ssdp"].map((method) => ({
+        method, snapshotId: "responses", retrievedAt: "2026-09-07T00:00:00.000Z",
+        responses: [{ method, address: "192.168.50.41", respondedAt: "2026-09-07T00:00:02.000Z", evidenceIds: [`evidence:${method}`] }],
+      })),
+      ...[["tcp-connect", 443], ["udp-probe", 5683]].map(([method, port]) => ({
+        method, snapshotId: "responses", retrievedAt: "2026-09-07T00:00:00.000Z",
+        responses: [{ method, address: "192.168.50.41", port, respondedAt: "2026-09-07T00:00:03.000Z", evidenceIds: [`evidence:${method}`] }],
+      })),
+    ],
+  });
+  const responses = buildMacTimeline([raw], MAC).entries[0].branches[0].responses;
+
+  assert.deepEqual(responses.map((item) => item.method).sort(), ["icmp-echo", "mdns", "snmpv3", "ssdp", "tcp-connect", "udp-probe"]);
+  assert.equal(responses.filter((item) => item.method === "icmp-echo").length, 1);
+  assert.equal(responses.find((item) => item.method === "tcp-connect").port, 443);
+  assert.equal(responses.find((item) => item.method === "udp-probe").port, 5683);
+  assert.ok(responses.every((item) => item.address === "192.168.50.41" && item.evidenceIds.length === 1));
+});
+
+test("[MTL-15] timeline projection excludes credential-like raw source fields", () => {
+  const marker = "TEST_TIMELINE_CREDENTIAL_MARKER_DO_NOT_EXPOSE";
+  const raw = snapshot("2026-09-08T00:00:00.000Z", [{
+    id: `device:mac:${MAC}`, addresses: ["192.168.50.41"], mac: MAC, name: "Camera", credential: marker,
+  }], {
+    evidence: [{ id: "evidence:secret-source", type: "source", raw: { token: marker } }],
+  });
+  const timeline = buildMacTimeline([raw], MAC);
+
+  assert.ok(timeline.entries.length > 0);
+  assert.doesNotMatch(JSON.stringify(timeline), new RegExp(marker));
+});
+
 function snapshot(observedAt, devices, extra = {}) {
   return {
     id: `snapshot:${observedAt}`,
