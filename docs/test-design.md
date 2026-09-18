@@ -371,12 +371,27 @@ The result view represents the last completed check for each scope and method, w
 | REG-02 | P1 | Load live synthetic and static read-only demos. Representative topology, navigation, exports, read-only controls, and privacy checks continue to pass | Existing browser/static suites |
 | DEP-10 | P0 | In the disconnected synthetic Docker fixture, populate/reset/recreate the application and load local configuration. Persistent reset remains empty after recreation; local loading does not restore cached devices; a separately authorized isolated check can add a responding target | Container acceptance |
 
-#### Test coverage mapping
+### 5.14 Requirement coverage and claim rules
+
+Requirement IDs are executable traceability markers, not broad topic labels. An automated test may cite an ID only when that test performs the condition or action in the corresponding row and asserts its complete expected result at the stated boundary. A test that checks only that a control is visible does not cover the workflow performed by that control. A test that exercises only one interaction mode does not cover pointer, keyboard, reload, or failure recovery requirements unless it performs and asserts each named mode.
+
+When one test cites multiple IDs, its assertions must remain attributable to every cited ID. Split the test when one failure would not identify which requirement regressed, or when setup for one scenario can mask another. Regression tests may preserve a defect-specific input, but their oracle must state the durable product behavior rather than the former implementation detail.
+
+Automated coverage uses the following markers:
+
+- Node and browser tests put the covered IDs in the `test()` title.
+- Executable deployment or post-deployment acceptance scripts use an adjacent `Requirements:` comment. Such a marker means the executable procedure performs and asserts the requirement; documentation alone is not sufficient.
+- `REG-*` IDs are aggregate gates and use an `Aggregate requirements:` comment on the CI commands that execute their constituent suites.
+- P0 and P1 IDs must have at least one executable marker. P2 IDs should be automated when a deterministic browser oracle is practical and otherwise need a documented manual acceptance procedure.
+- A Node test validates that every marked ID exists in this design and that every P0/P1 ID has an executable marker. Semantic equivalence between a scenario and its claimed ID remains a review responsibility.
+
+Coverage is intentionally distributed by boundary:
 
 - Collector and evidence behavior: Linux/network/controller collector component tests, plus observation contract tests.
-- Current projection, scoped confirmation, and topology: current-state/inventory/topology tests and observation contract tests.
-- Reset, restart, generation boundaries, presence, and exports: store and loopback server integration tests.
-- Real reset prompt, local recovery, candidate list, status wording, and stale response: browser acceptance against synthetic fixtures.
+- Current projection, scoped confirmation, identity operations, and topology: current-state/inventory/topology/store tests and observation contract tests.
+- Reset, restart, generation boundaries, presence, exports, and mutation failure atomicity: store and loopback server integration tests.
+- Local UI workflows: browser acceptance must perform the mutation, scan, export, filtering, reload, and error-recovery actions rather than infer them from enabled controls.
+- Static-demo UI workflows: browser acceptance verifies rendering, local-only interactions, fail-closed fixture handling, and the absence of live API mutation.
 - Docker persistence and real collector behavior: disconnected container acceptance. Unit mocks and a demo browser do not prove this boundary.
 
 ## 6. Cross-Cutting Invariants
@@ -428,7 +443,7 @@ Any P0 failure blocks completion. Do not accept an unexplained timeout merely be
 
 The [CI workflow](../.github/workflows/ci.yml) runs three job groups; the Node.js group expands into the supported-version matrix:
 
-1. `npm run check` on Node.js 22.0.0 and the latest releases of the supported 22, 24, and 26 lines for syntax, unit, component, store, and loopback API tests. This includes a fixed-clock static-demo build test that captures projected synthetic API responses, verifies representative TCP/UDP, snapshot-history, and MAC-timeline data, checks shared-asset/runtime selection and export files, and asserts the read-only fixture contract. Runtime unit tests cover live JSON requests, layout persistence, static mutation rejection, shared fixture loading with independent response objects, request/body deadlines, invalid fixtures, and export targets.
+1. `npm run check` on Node.js 22.0.0 and the latest releases of the supported 22, 24, and 26 lines for syntax, requirement-traceability, unit, component, store, and loopback API tests. The traceability test checks that every executable marker names a defined requirement and that every P0/P1 requirement has an executable marker; reviewers still verify that each marked scenario performs the complete action and oracle. The suite also includes a fixed-clock static-demo build test that captures projected synthetic API responses, verifies representative TCP/UDP, snapshot-history, and MAC-timeline data, checks shared-asset/runtime selection and export files, and asserts the read-only fixture contract. Runtime unit tests cover live JSON requests, layout persistence, static mutation rejection, shared fixture loading with independent response objects, request/body deadlines, invalid fixtures, and export targets.
 2. Browser acceptance first runs `npm run verify:screenshots` against the committed README images, before any regeneration can overwrite them. It then runs `npm run test:e2e` in Chromium against the fixed-clock synthetic server and generated static site. Static cases cover root and `/boushun/` hosting, primary navigation, render-time capability restrictions, fixture failures and reload recovery, JSON/CSV downloads, and no live `/api/*` requests or console/page errors during normal use. The shared smoke contract is exercised locally, including unavailable-fixture and mismatched-export cases, without contacting Pages. After acceptance, CI uploads the Pages preview image, runs `npm run screenshots`, and validates the regenerated images with `npm run verify:screenshots`. PNG checks cover structure, expected width, minimum height, and absence of textual metadata; exact bytes are not compared across operating systems because browser rendering and fonts vary by runner.
 3. `npm run test:container` builds the production image and validates the production Compose host-network configuration. Runtime checks share a disconnected synthetic fixture's network namespace: explicit local configuration loading must discover its dummy interface, ICMP must succeed, and a TCP scan must find its service. The application retains its non-root user, read-only root filesystem, `NET_RAW`-only capability boundary, health check, persistent volume, and restricted temporary filesystem. Writes to the root filesystem and execution from `/tmp` must actually fail. Recreating the application container must preserve exported state and layout. After reset, another recreation must preserve the empty state; loading local configuration adds only the probe and configured ranges. Only the isolated fixture receives `NET_ADMIN` to create the dummy interface; neither container can reach the host LAN. The script ignores local overrides and `.env`, refuses an existing `boushun-ci` project or data volume, and removes its synthetic containers and volume on completion or test failure.
 
