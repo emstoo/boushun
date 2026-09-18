@@ -193,6 +193,12 @@ test("[UI-21, UI-22, DEP-08] Pages static demo renders read-only from the projec
   const inventoryDownloadPath = await inventoryDownload.path();
   expect(await readFile(inventoryDownloadPath, "utf8")).toContain("storage.demo.test");
 
+  await page.locator('.nav-item[data-section="history"]').click();
+  await page.getByLabel("History view").selectOption("mac");
+  await page.locator("#mac-timeline-selector").fill("02:00:00:00:00:30");
+  await expect(page.locator("#mac-timeline-summary")).toContainText("storage.demo.test");
+  await expect(page.locator("#mac-timeline-list .mac-timeline-entry")).toHaveCount(1);
+
   await page.locator('.nav-item[data-section="sources"]').click();
   await expect(page.getByRole("heading", { name: "Data sources", exact: true })).toBeVisible();
   const interfaceControls = page.locator('#interface-body input[type="checkbox"]');

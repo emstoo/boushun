@@ -28,6 +28,7 @@ Boushun 0.1.0 provides:
 - A sticky global scan status showing scan type, target, phase, completed/total checks, discoveries, elapsed time, percentage, and cancellation from every screen.
 - Manual device name, role, tags, merge, and IP split projections with an audit trail.
 - Semantic diffs for device identity, IP assignment, services, and links; ARP state-only churn is ignored.
+- A MAC-centered device timeline over retained snapshots, reachable from History and Inventory, that keeps shared-MAC and manual-split branches separate and presents missing observations as unknown connectivity.
 - Full database export, validated import preview, and confirmed reset with automatic rolling pre-change backups. Reset remains empty after reload or restart, including the local demo; local configuration loading restores only the probe and eligible ranges.
 - Zoom, pan, viewport reset, node pinning, search, JSON/SVG export, and atomic local storage.
 
@@ -41,7 +42,7 @@ The [public demo](https://emstoo.github.io/boushun/) uses the same UI with bundl
 | Navigation, search, filters, node inspection, pan/zoom | Available | Available |
 | Node dragging and automatic-layout reset | Positions can be saved to the database | Current page session only; reload discards changes |
 | JSON, SVG, inventory/ports/target CSV exports | Available | Synthetic data only; JSON and inventory/ports CSV are build-time files |
-| History comparison | Available when at least two snapshots exist | One generated snapshot; comparison is disabled |
+| History | Snapshot comparison is available with at least two snapshots; MAC-centered history is available for retained MAC observations | One generated snapshot disables comparison but still provides synthetic MAC-centered history |
 | Scan, identity, interface-policy, schedule, and notification changes | Available subject to normal validation and busy-state restrictions | Disabled, including dynamically rendered controls |
 | Database export, import, and reset | Available | Disabled; the database summary is view-only |
 

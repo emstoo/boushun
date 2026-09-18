@@ -9,6 +9,8 @@ This reference describes the loopback-only Node.js server, including the local s
 | `GET` | `/api/history` | Snapshot summaries |
 | `GET` | `/api/history/:id` | A projected historical snapshot and its topologies |
 | `GET` | `/api/compare?from=:id&to=:id` | Semantic diff between any two snapshots |
+| `GET` | `/api/mac-timelines` | Retained MAC index with labels, retrieval range, branch counts, and identity-review status |
+| `GET` | `/api/mac-timelines/:mac` | Per-snapshot projected branches, addresses, identity fields, and direct responses for one MAC |
 | `GET` | `/api/tcp-service-presets` | TCP service presets, including observed Kubernetes NodePorts |
 | `POST` | `/api/tcp-service-scan` | Start independent range-wide TCP service discovery |
 | `GET` | `/api/udp-service-presets` | Bounded UDP protocol-probe presets |
@@ -48,6 +50,33 @@ Projected devices and IP assignments expose `observation.kind` (`local`, `regist
 Current state retains check coverage and original response times in `snapshot.observationChecks`. Later successful checks supersede only the addresses and ports they cover for the same method. A failed/cancelled job cannot replace saved results. Presence includes `firstRetrievedAt`, `lastRetrievedAt`, `firstResponseAt`, `lastResponseAt`, and `responseCount`; legacy `firstSeenAt`/`lastSeenAt`/`observationCount` describe retrieval history, and `currentlyObserved` means a retained direct confirmation, not continuous online status. Inventory CSV includes retrieval/source/response times and responding addresses.
 
 Reset clears observations, history, overrides, layout, interface policies, schedules, and notifications. It retains the disclosed local recovery backup and does not modify OS caches or external source files. Active scans block reset, and requests admitted against a replaced database are rejected with `409`. After reset, state and history stay empty until an explicit collection or import.
+
+## MAC-centered history
+
+MAC timeline endpoints use canonical MAC addresses as a read-only query and
+presentation axis over retained raw snapshots. Each snapshot is projected
+independently with the current overrides and interface settings. A timeline
+begins at the first retained snapshot whose projected interface explicitly
+carries the selected MAC, and each entry keeps that snapshot's retrieval
+provenance.
+
+`GET /api/mac-timelines` returns `retention` and an `items` array. Each item has a
+canonical lowercase colon-separated `mac`, preferred label, manufacturer,
+locally-administered flag, first/last retrieval times, observation-point count,
+distinct projected branch count, and identity-review status.
+
+`GET /api/mac-timelines/:mac` accepts canonical, hyphenated, or compact input and
+returns the canonical MAC, retention metadata, a summary, and oldest-first
+snapshot entries. Each entry contains one or more projected device branches with
+identity metadata, addresses, retrieval/source/response times, scoped responses,
+and qualified changes since the previous observation of that branch. Manual
+splits and shared-MAC cases remain separate branches. Invalid input returns
+`400`; a valid MAC absent from retained projected history returns `404`.
+
+Responses contain projected identity fields, addresses, timestamps, and scoped
+direct-response metadata. Connectivity remains unknown when a snapshot has no
+entry for the MAC, an address leaves a later projection, or direct-response
+evidence is absent.
 
 ## Example
 

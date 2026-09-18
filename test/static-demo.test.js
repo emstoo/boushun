@@ -13,7 +13,6 @@ test("static demo build captures projected synthetic API responses and exports",
   try {
     const result = await buildStaticDemo({ outputDirectory, now: () => fixedTime });
     assert.equal(result.generatedAt, fixedTime.toISOString());
-    assert.equal(result.routeCount, 5);
 
     const [index, app, runtime, fixtureText, exportText, inventoryCsv, portsCsv] = await Promise.all([
       readFile(path.join(outputDirectory, "index.html"), "utf8"),
@@ -36,6 +35,7 @@ test("static demo build captures projected synthetic API responses and exports",
     assert.equal(runtime, await readFile(new URL("../src/web/static-demo-runtime.js", import.meta.url), "utf8"));
 
     const fixture = JSON.parse(fixtureText);
+    assert.equal(result.routeCount, Object.keys(fixture.routes).length);
     assert.equal(fixture.readOnly, true);
     assert.equal(fixture.generatedAt, fixedTime.toISOString());
     assert.equal(fixture.routes["/api/state"].demo, true);
@@ -45,6 +45,10 @@ test("static demo build captures projected synthetic API responses and exports",
     assert.equal(fixture.routes["/api/history"].length, 1);
     const historyId = fixture.routes["/api/history"][0].id;
     assert.ok(fixture.routes[`/api/history/${encodeURIComponent(historyId)}`].snapshot);
+    assert.ok(fixture.routes["/api/mac-timelines"].items.length > 0);
+    const mac = fixture.routes["/api/mac-timelines"].items[0].mac;
+    assert.equal(fixture.routes[`/api/mac-timelines/${encodeURIComponent(mac)}`].mac, mac);
+    assert.equal(result.routeCount, 5 + fixture.routes["/api/history"].length + fixture.routes["/api/mac-timelines"].items.length);
 
     const exported = JSON.parse(exportText);
     assert.equal(exported.snapshot.observedAt, fixedTime.toISOString());

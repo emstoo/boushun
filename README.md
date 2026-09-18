@@ -9,7 +9,7 @@ Boushun keeps raw observations on the probe, distinguishes facts from inference,
 - Local-first inventory composed from Linux, DHCP, Kubernetes, controller exports, multicast, SNMPv3, and OUI observations.
 - Bounded ICMP discovery plus independent TCP and UDP service discovery across every usable address in an explicitly allowed CIDR.
 - Physical, Logical, and Services topology views that distinguish observed facts from inferred placement.
-- Searchable inventory, confirmed open-port views, per-address rescans, current-state composition, history, comparison, schedules, and notifications.
+- Searchable inventory, confirmed open-port views, per-address rescans, current-state composition, snapshot comparison, a MAC-centered device timeline, schedules, and notifications.
 - Manual identity correction and merge/split controls that preserve the original evidence.
 - Local database export, validated preview/import, backup, and reset workflows with atomic JSON storage.
 

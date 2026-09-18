@@ -37,6 +37,44 @@ test("[UI-01, UI-02] synthetic demo exposes every primary screen", async ({ page
   }
 });
 
+test("[MTL-11, MTL-12] MAC history is searchable from History and reachable from Inventory", async ({ page }) => {
+  await openDemo(page);
+  await page.locator('.nav-item[data-section="history"]').click();
+  await page.getByLabel("History view").selectOption("mac");
+  await page.locator("#mac-timeline-selector").fill("02:00:00:00:00:30");
+  await expect(page.locator("#mac-timeline-summary")).toContainText("storage.demo.test");
+  await expect(page.locator("#mac-timeline-summary")).toContainText("Locally administered");
+  await expect(page.locator("#mac-timeline-list .mac-timeline-entry")).toHaveCount(1);
+  await expect(page.locator("#mac-timeline-list")).toContainText("192.168.50.30");
+  await expect(page.locator("#mac-timeline-list")).not.toContainText(/offline|disconnected/i);
+
+  await page.locator("#mac-timeline-selector").fill("");
+  await expect(page.locator("#mac-timeline-summary")).toBeHidden();
+  await expect(page.locator("#mac-timeline-list .mac-timeline-entry")).toHaveCount(0);
+
+  await page.locator("#mac-timeline-selector").fill("020000000030");
+  await expect(page.locator("#mac-timeline-selector")).toHaveValue("02:00:00:00:00:30");
+  await expect(page.locator("#mac-timeline-summary")).toContainText("storage.demo.test");
+
+  await page.locator("#mac-timeline-selector").fill("02-00-00-00-00-99");
+  await expect(page.locator("#mac-timeline-selector")).toHaveValue("02:00:00:00:00:99");
+  await expect(page.locator("#mac-timeline-summary")).toBeHidden();
+  await expect(page.locator("#mac-timeline-status")).toContainText("No retained history was found");
+
+  await page.locator("#mac-timeline-selector").fill("02-00-00-00-00-30");
+  await expect(page.locator("#mac-timeline-selector")).toHaveValue("02:00:00:00:00:30");
+  await expect(page.locator("#mac-timeline-summary")).toContainText("storage.demo.test");
+
+  await page.locator('.nav-item[data-section="inventory"]').click();
+  await page.locator("#inventory-body tr", { hasText: "storage.demo.test" }).getByRole("button", { name: /View details/ }).click();
+  await expect(page.locator("#drawer-mac-timeline")).toBeVisible();
+  await page.locator("#drawer-mac-timeline").click();
+  await expect(page.locator("#history-section")).toBeVisible();
+  await expect(page.getByLabel("History view")).toHaveValue("mac");
+  await expect(page.locator("#mac-timeline-selector")).toHaveValue("02:00:00:00:00:30");
+  await expect(page.locator("#mac-timeline-summary")).toContainText("storage.demo.test");
+});
+
 test("[UI-08, UI-09, UI-10, UI-12] topology legend, viewport, details, and address actions work", async ({ page }) => {
   await openDemo(page);
   await expect(page.getByRole("complementary", { name: "Node status legend" })).toContainText("Responded");

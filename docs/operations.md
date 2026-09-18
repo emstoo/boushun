@@ -18,6 +18,8 @@ No passive, standard, or deep profile scans ports. Service discovery does not se
 
 The Database screen exports the complete state file in a versioned Boushun wrapper. Import accepts a raw v1/v2 state or the current wrapper. It validates the document without mutation first and has a 25 MiB request limit. Import and reset are rejected while a scan is active. Before either replacement, Boushun writes a mode `0600` backup beside `state.json` and retains the five newest `state.backup.*.json` files. Reset affects only Boushun state; `oui.csv`, kubeconfig, controller exports, and SNMP target or credential files remain untouched.
 
+The MAC-centered History view is computed on demand from retained raw snapshots. Its labeled time span starts at the oldest retained snapshot, while each selected timeline starts at the first retained projection that explicitly associates its MAC. Every raw snapshot is projected independently with current identity overrides and interface settings. Shared-MAC and manual-split devices remain visibly branched. Missing observations and cache-only records carry unknown connectivity status.
+
 Reset clears observations, history, manual edits, layout, interface settings, schedules, and notifications. Reloading or restarting Docker preserves the empty state. Choose **Load local configuration** to restore the probe and eligible ranges, then explicitly start a check to obtain device responses. Old OS cache entries and saved exports may be retrieved as candidates but cannot restore confirmed results. Recovery backups are retained for explicit import; reset is not secure erasure. A new local demo is seeded once, and an existing reset demo remains empty on restart.
 
 ## Container image maintenance
@@ -37,7 +39,7 @@ npm ci
 npm run demo:build
 ```
 
-The build replaces `dist/demo/`; do not store hand-maintained files there. It creates a temporary store, starts a loopback-only server with the bundled synthetic collector and scheduler disabled, and captures projected state/history/database/automation responses plus the normal JSON/inventory-CSV/ports-CSV exports. It then closes the server and removes the temporary store. The observation time is the build time; tests inject a fixed clock. No live LAN collection is needed.
+The build replaces `dist/demo/`; do not store hand-maintained files there. It creates a temporary store, starts a loopback-only server with the bundled synthetic collector and scheduler disabled, and captures projected state/history/MAC-timeline/database/automation responses plus the normal JSON/inventory-CSV/ports-CSV exports. It then closes the server and removes the temporary store. The observation time is the build time; tests inject a fixed clock. No live LAN collection is needed.
 
 The [builder](../scripts/build-static-demo.js) copies the shared HTML, styles, and application modules unchanged and selects [static-demo-runtime.js](../src/web/static-demo-runtime.js) as the generated `runtime.js`. The normal server uses [runtime.js](../src/web/runtime.js). [api-client.js](../src/web/api-client.js) owns both runtime implementations and the shared export targets, while [capabilities.js](../src/web/capabilities.js) preserves control restrictions during rendering. The build does not rewrite application source or replace browser APIs. Relative asset paths support both root hosting and the `/boushun/` project subpath. The generated site needs only static hosting, not the temporary build server.
 

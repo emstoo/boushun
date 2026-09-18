@@ -44,6 +44,11 @@ export async function buildStaticDemo(options = {}) {
       const route = `/api/history/${encodeURIComponent(item.id)}`;
       routes[route] = await captureJson(baseURL, route);
     }
+    routes["/api/mac-timelines"] = await captureJson(baseURL, "/api/mac-timelines");
+    for (const item of routes["/api/mac-timelines"].items) {
+      const route = `/api/mac-timelines/${encodeURIComponent(item.mac)}`;
+      routes[route] = await captureJson(baseURL, route);
+    }
 
     const staticExports = await Promise.all(Object.values(EXPORTS)
       .map(async ({ fileName, route }) => [fileName, await captureFile(baseURL, route)]));

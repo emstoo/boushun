@@ -11,6 +11,7 @@ import { withInventory } from "./domain/inventory.js";
 import { latestTime } from "./domain/observation.js";
 import { resolveInterfacePolicy } from "./domain/interface-policy.js";
 import { assertSafeScanCIDR } from "./domain/ipv4.js";
+import { buildMacTimeline, buildMacTimelineIndex, isValidMacTimelineInput } from "./domain/mac-timeline.js";
 import { buildComparableServiceChanges, endpointKey } from "./domain/service-observation.js";
 import { ScanManager } from "./scan/scan-manager.js";
 import { ServiceScheduler } from "./scan/service-scheduler.js";
@@ -204,6 +205,34 @@ export async function createBoushunServer(options = {}) {
           udpServices: snapshot.udpServices ?? null,
           warnings: snapshot.warnings,
         })));
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/mac-timelines") {
+        const state = await store.read();
+        return json(response, 200, buildMacTimelineIndex(state.snapshots, state.overrides, state.settings, {
+          maximumSnapshotCount: store.maxSnapshots,
+        }));
+      }
+
+      const macTimelineMatch = url.pathname.match(/^\/api\/mac-timelines\/([^/]+)$/);
+      if (request.method === "GET" && macTimelineMatch) {
+        let mac;
+        try {
+          mac = decodeURIComponent(macTimelineMatch[1]);
+        } catch {
+          throw requestError("MAC address is not valid");
+        }
+        if (!isValidMacTimelineInput(mac)) throw requestError("MAC address is not valid");
+        const state = await store.read();
+        const timeline = buildMacTimeline(state.snapshots, mac, state.overrides, state.settings, {
+          maximumSnapshotCount: store.maxSnapshots,
+        });
+        if (!timeline) {
+          const error = new Error("MAC address is not present in retained history");
+          error.code = "NOT_FOUND";
+          throw error;
+        }
+        return json(response, 200, timeline);
       }
 
       const historyMatch = url.pathname.match(/^\/api\/history\/([^/]+)$/);
