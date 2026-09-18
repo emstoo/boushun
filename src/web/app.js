@@ -34,6 +34,12 @@ const state = {
   viewport: createViewport(),
   suppressClick: false,
   history: [],
+  historyView: "observations",
+  macTimelineIndex: null,
+  macTimeline: null,
+  selectedMac: null,
+  macTimelineLoading: false,
+  macTimelineError: null,
   portSearch: "",
   portProtocol: "all",
   portState: "confirmed",
@@ -50,7 +56,7 @@ const dom = Object.fromEntries(
     "map-legend", "graph-stage", "network-graph", "graph-empty", "graph-empty-title", "graph-empty-copy", "graph-empty-actions", "graph-empty-deep", "graph-empty-sources", "detail-drawer", "drawer-close",
     "drawer-kind", "drawer-title", "drawer-subtitle", "drawer-confidence", "drawer-metadata",
     "drawer-ports-section", "drawer-port-count", "drawer-ports", "drawer-port-changes", "drawer-port-uncertain", "drawer-open-ports",
-    "drawer-identity-section", "drawer-identity-copy", "drawer-use-suggested-name", "drawer-apply-recommended-split", "drawer-actions-section", "drawer-actions-copy", "drawer-rescan-tcp", "drawer-rescan-udp", "drawer-export-target",
+    "drawer-identity-section", "drawer-identity-copy", "drawer-use-suggested-name", "drawer-apply-recommended-split", "drawer-mac-timeline", "drawer-actions-section", "drawer-actions-copy", "drawer-rescan-tcp", "drawer-rescan-udp", "drawer-export-target",
     "drawer-evidence", "loading-overlay", "loading-title", "loading-subtitle", "graph-caption",
     "zoom-in", "zoom-out", "zoom-level", "reset-viewport", "inventory-body", "candidate-inventory-body", "candidate-count", "refresh-sources", "evidence-count", "evidence-summary", "evidence-ledger", "change-list", "scope-list",
     "scan-dialog", "scan-form", "scan-profile", "scan-cidr", "confirm-scan", "scan-progress", "cancel-scan", "toast", "map-section",
@@ -60,7 +66,7 @@ const dom = Object.fromEntries(
     "ports-result-caption", "ports-empty", "ports-empty-title", "ports-empty-copy", "ports-empty-tcp", "ports-empty-udp", "ports-table-wrap", "ports-body", "export-ports-csv", "port-stat-new", "port-stat-closed",
     "udp-dialog", "udp-form", "udp-cidr", "udp-preset", "udp-preset-description", "udp-custom-ports", "udp-scan-summary", "confirm-udp-scan",
     "inventory-section", "evidence-section", "sources-section", "source-summary", "source-grid", "interface-body",
-    "history-section", "history-from", "history-to", "compare-history", "history-result", "history-timeline", "map-companion",
+    "history-section", "history-observations-tab", "history-mac-tab", "history-observations-view", "history-mac-view", "history-from", "history-to", "compare-history", "history-result", "history-timeline", "mac-timeline-selector", "mac-timeline-options", "mac-timeline-status", "mac-timeline-summary", "mac-timeline-list", "map-companion",
     "device-editor", "device-name", "device-role", "device-tags", "merge-device", "split-device", "identity-review-summary", "export-inventory-csv",
     "automation-section", "automation-summary", "automation-nav-badge", "schedule-form", "schedule-protocol", "schedule-cidr", "schedule-preset", "schedule-custom-ports", "schedule-interval", "schedule-list",
     "notification-list", "mark-notifications-read",
@@ -114,6 +120,9 @@ async function loadState() {
 function applyPayload(payload) {
   state.payload = payload;
   state.positions = { ...(payload.layout ?? {}) };
+  state.macTimelineIndex = null;
+  state.macTimeline = null;
+  state.macTimelineError = null;
   selectTopology();
   renderAll();
 }
@@ -481,7 +490,12 @@ function openDetail(item, kind) {
   const editable = kind === "node" && item.kind === "device";
   const scannable = kind === "node" && ["device", "ip"].includes(item.kind) && (item.addresses ?? []).some(isIPv4);
   const device = editable ? state.payload.inventory?.devices?.find((entry) => entry.id === item.id) : null;
+  const deviceMac = editable
+    ? state.payload.inventory?.interfaces?.find((entry) => entry.deviceId === item.id && entry.mac)?.mac ?? null
+    : null;
   dom["device-editor"].classList.toggle("hidden", !editable);
+  dom["drawer-mac-timeline"].classList.toggle("hidden", !deviceMac);
+  dom["drawer-mac-timeline"].dataset.mac = deviceMac ?? "";
   dom["drawer-actions-section"].classList.toggle("hidden", !scannable);
   dom["drawer-actions-copy"].textContent = item.role === "vip"
     ? "Recheck this virtual IP directly without treating it as a device."
@@ -1087,6 +1101,204 @@ function renderHistory() {
     );
     return item;
   }));
+  renderHistoryView();
+}
+
+function renderHistoryView() {
+  const macView = state.historyView === "mac";
+  dom["history-observations-tab"].classList.toggle("active", !macView);
+  dom["history-observations-tab"].setAttribute("aria-pressed", String(!macView));
+  dom["history-mac-tab"].classList.toggle("active", macView);
+  dom["history-mac-tab"].setAttribute("aria-pressed", String(macView));
+  dom["history-observations-view"].classList.toggle("hidden", macView);
+  dom["history-mac-view"].classList.toggle("hidden", !macView);
+  if (!macView) return;
+  renderMacTimeline();
+  if (!state.macTimelineIndex && !state.macTimelineLoading) void loadMacTimelineIndex();
+}
+
+function setHistoryView(view) {
+  state.historyView = view === "mac" ? "mac" : "observations";
+  renderHistoryView();
+}
+
+async function loadMacTimelineIndex() {
+  if (state.macTimelineLoading) return;
+  const epoch = state.epoch;
+  state.macTimelineLoading = true;
+  state.macTimelineError = null;
+  renderMacTimeline();
+  try {
+    state.macTimelineIndex = await api("/api/mac-timelines");
+    if (epoch !== state.epoch) return;
+    if (state.selectedMac && state.macTimelineIndex.items.some((item) => item.mac === state.selectedMac)) {
+      await loadMacTimeline(state.selectedMac);
+      return;
+    }
+    if (state.selectedMac) {
+      state.selectedMac = null;
+      state.macTimeline = null;
+      dom["mac-timeline-selector"].value = "";
+    }
+  } catch (error) {
+    if (epoch !== state.epoch) return;
+    state.macTimelineError = error.message;
+    showToast(error.message, true);
+  } finally {
+    if (epoch === state.epoch) {
+      state.macTimelineLoading = false;
+      renderMacTimeline();
+    }
+  }
+}
+
+async function loadMacTimeline(mac) {
+  const epoch = state.epoch;
+  state.selectedMac = mac;
+  state.macTimeline = null;
+  state.macTimelineLoading = true;
+  state.macTimelineError = null;
+  dom["mac-timeline-selector"].value = mac;
+  renderMacTimeline();
+  try {
+    const timeline = await api(`/api/mac-timelines/${encodeURIComponent(mac)}`);
+    if (epoch !== state.epoch || state.selectedMac !== mac) return;
+    state.macTimeline = timeline;
+  } catch (error) {
+    if (epoch !== state.epoch || state.selectedMac !== mac) return;
+    state.macTimelineError = error.message;
+    showToast(error.message, true);
+  } finally {
+    if (epoch === state.epoch && state.selectedMac === mac) {
+      state.macTimelineLoading = false;
+      renderMacTimeline();
+    }
+  }
+}
+
+function renderMacTimeline() {
+  const index = state.macTimelineIndex;
+  const items = index?.items ?? [];
+  dom["mac-timeline-options"].replaceChildren(...items.map((item) => {
+    const option = document.createElement("option");
+    option.value = item.mac;
+    option.label = [item.preferredLabel, item.manufacturer].filter(Boolean).join(" · ");
+    return option;
+  }));
+  dom["mac-timeline-summary"].classList.add("hidden");
+  dom["mac-timeline-summary"].replaceChildren();
+  dom["mac-timeline-list"].replaceChildren();
+  dom["mac-timeline-status"].classList.remove("hidden");
+
+  if (state.macTimelineLoading) {
+    dom["mac-timeline-status"].textContent = state.selectedMac ? `Loading retained history for ${state.selectedMac}…` : "Loading retained MAC history…";
+    return;
+  }
+  if (state.macTimelineError) {
+    dom["mac-timeline-status"].textContent = `Unable to load retained MAC history: ${state.macTimelineError}`;
+    return;
+  }
+  if (!index) {
+    dom["mac-timeline-status"].textContent = "Unable to load retained MAC history. Reopen this view to retry.";
+    return;
+  }
+  if (!items.length) {
+    dom["mac-timeline-status"].textContent = state.history.length
+      ? "Retained observations contain no MAC-based identities. Address-only observations are not inferred into this view."
+      : "No observations are saved. Load local configuration or run an explicit collection to create retained history.";
+    return;
+  }
+  if (!state.selectedMac) {
+    dom["mac-timeline-status"].textContent = "Choose a MAC to inspect its retained observations. Absence from a snapshot does not mean the device was offline.";
+    return;
+  }
+  if (!state.macTimeline) {
+    dom["mac-timeline-status"].textContent = "The selected MAC is no longer present in retained history.";
+    return;
+  }
+
+  const timeline = state.macTimeline;
+  const summary = timeline.summary;
+  dom["mac-timeline-status"].classList.add("hidden");
+  dom["mac-timeline-summary"].classList.remove("hidden");
+  const heading = element("div", "mac-summary-heading");
+  heading.append(
+    textElement("h3", summary.preferredLabel || timeline.mac),
+    textElement("code", timeline.mac),
+    ...(timeline.locallyAdministered ? [textElement("span", "Locally administered", "mac-summary-badge")] : []),
+  );
+  const facts = element("dl", "mac-summary-facts");
+  for (const [label, value] of [
+    ["First retrieved", formatOptionalDate(summary.firstRetrievedAt)],
+    ["Last retrieved", formatOptionalDate(summary.lastRetrievedAt)],
+    ["Last direct response", summary.lastResponseAt ? formatDate(summary.lastResponseAt) : "Unconfirmed"],
+    ["Available history", `${timeline.entries.length} observation point${timeline.entries.length === 1 ? "" : "s"} · from ${formatOptionalDate(timeline.retention.oldestRetainedAt)}`],
+  ]) {
+    const row = document.createElement("div");
+    row.append(textElement("dt", label), textElement("dd", value));
+    facts.append(row);
+  }
+  dom["mac-timeline-summary"].append(heading);
+  if (summary.needsIdentityReview || summary.branchCount > 1) {
+    dom["mac-timeline-summary"].append(textElement("p", "This MAC maps to multiple projected devices or has an identity review issue. The branches remain separate.", "mac-summary-warning"));
+  }
+  dom["mac-timeline-summary"].append(facts);
+  dom["mac-timeline-list"].replaceChildren(...[...timeline.entries].reverse().map(macTimelineEntry));
+}
+
+function macTimelineEntry(entry) {
+  const item = element("li", "mac-timeline-entry");
+  const heading = element("div", "mac-timeline-entry-heading");
+  const time = textElement("time", formatOptionalDate(entry.snapshot.observedAt));
+  time.dateTime = entry.snapshot.observedAt ?? "";
+  heading.append(time, textElement("span", `${profileLabel(entry.snapshot.profile)} observation`));
+  const branches = element("div", "mac-branch-list");
+  branches.append(...entry.branches.map(macBranchCard));
+  item.append(heading, branches);
+  return item;
+}
+
+function macBranchCard(branch) {
+  const card = element("article", "mac-branch-card");
+  card.append(
+    textElement("h4", branch.name || branch.suggestedName || branch.addresses[0] || "Unnamed device"),
+    textElement("span", branch.deviceId, "mac-branch-id"),
+  );
+  const facts = element("dl", "mac-branch-facts");
+  for (const [label, value] of [
+    ["Role / confidence", `${branch.role} · ${capitalize(branch.identityConfidence)}`],
+    ["Addresses", branch.addresses.join(", ") || "None"],
+    ["Sources", branch.sourceKinds.join(", ") || "Unknown"],
+    ["Retrieved", formatOptionalDate(branch.retrievedAt)],
+    ["Source observation", formatOptionalDate(branch.sourceObservedAt, "Unknown")],
+    ["Direct response", branch.lastResponseAt ? formatDate(branch.lastResponseAt) : "Unconfirmed"],
+  ]) {
+    const row = document.createElement("div");
+    row.append(textElement("dt", label), textElement("dd", value));
+    facts.append(row);
+  }
+  card.append(facts);
+  if (branch.responses.length) {
+    card.append(textElement("p", `Responses: ${branch.responses.map((response) => `${response.address}${response.port ? `:${response.port}` : ""} · ${response.method} · ${formatOptionalDate(response.respondedAt, "Unknown time")}`).join("; ")}`, "mac-branch-responses"));
+  }
+  const changes = macBranchChanges(branch.changesSincePreviousObservation);
+  if (changes) card.append(textElement("p", changes, "mac-branch-changes"));
+  return card;
+}
+
+function macBranchChanges(changes) {
+  if (!changes) return null;
+  const details = [
+    changes.addressesAdded.length ? `addresses first represented: ${changes.addressesAdded.join(", ")}` : null,
+    changes.addressesNoLongerRepresented.length ? `addresses no longer represented: ${changes.addressesNoLongerRepresented.join(", ")}` : null,
+    changes.fieldsChanged.length ? `updated fields: ${changes.fieldsChanged.join(", ")}` : null,
+    changes.responseMethodsAdded.length ? `newly represented response methods: ${changes.responseMethodsAdded.join(", ")}` : null,
+  ].filter(Boolean);
+  return details.length ? `Since the previous observation (${formatOptionalDate(changes.previousObservedAt)}), ${details.join("; ")}.` : null;
+}
+
+function formatOptionalDate(value, fallback = "Not available") {
+  return value ? formatDate(value) : fallback;
 }
 
 async function compareHistory() {
@@ -1321,6 +1533,17 @@ function bindEvents() {
     switchSection("ports");
     renderOpenPorts(state.payload.tcpServiceObservation, state.payload.udpServiceObservation);
   });
+  dom["drawer-mac-timeline"].addEventListener("click", () => {
+    const mac = dom["drawer-mac-timeline"].dataset.mac;
+    if (!mac) return;
+    closeDrawer();
+    state.selectedMac = mac;
+    state.macTimeline = null;
+    dom["mac-timeline-selector"].value = mac;
+    switchSection("history");
+    setHistoryView("mac");
+    if (state.macTimelineIndex) void loadMacTimeline(mac);
+  });
   dom["drawer-use-suggested-name"].addEventListener("click", () => {
     dom["device-name"].value = dom["drawer-use-suggested-name"].dataset.name || "";
     dom["device-name"].focus();
@@ -1404,6 +1627,13 @@ function bindEvents() {
   dom["cancel-scan"].addEventListener("click", cancelScan);
   dom["global-cancel-scan"].addEventListener("click", cancelScan);
   dom["compare-history"].addEventListener("click", compareHistory);
+  dom["history-observations-tab"].addEventListener("click", () => setHistoryView("observations"));
+  dom["history-mac-tab"].addEventListener("click", () => setHistoryView("mac"));
+  dom["mac-timeline-selector"].addEventListener("input", (event) => {
+    const value = event.target.value.trim().toLowerCase();
+    const match = state.macTimelineIndex?.items.find((item) => item.mac === value);
+    if (match && match.mac !== state.selectedMac) void loadMacTimeline(match.mac);
+  });
   dom["device-editor"].addEventListener("submit", saveDeviceOverride);
   dom["merge-device"].addEventListener("click", mergeSelectedDevice);
   dom["split-device"].addEventListener("click", splitSelectedDevice);
@@ -1796,6 +2026,7 @@ function switchSection(section) {
   dom["automation-section"].classList.toggle("hidden", section !== "automation");
   dom["database-section"].classList.toggle("hidden", section !== "database");
   if (section === "database") void refreshDatabase();
+  if (section === "history" && state.historyView === "mac" && !state.macTimelineIndex && !state.macTimelineLoading) void loadMacTimelineIndex();
 }
 
 function closeDrawer() {

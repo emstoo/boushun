@@ -1,5 +1,6 @@
 import path from "node:path";
 import { assertSafeScanCIDR, parseCIDR } from "../domain/ipv4.js";
+import { normalizeMac } from "../domain/mac.js";
 import { collectLinux } from "./linux.js";
 import { collectKubernetes } from "./kubernetes.js";
 import { collectDiscovery } from "./discovery.js";
@@ -212,11 +213,6 @@ function applySnmp(snapshot, observations) {
       });
     }
   }
-}
-
-function normalizeMac(value) {
-  const compact = String(value ?? "").toLowerCase().replace(/[^0-9a-f]/g, "");
-  return compact.length === 12 ? compact.match(/.{2}/g).join(":") : null;
 }
 
 function safeId(value) {

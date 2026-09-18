@@ -149,6 +149,25 @@ test("HTTP integration contract", async (t) => {
   assert.ok(Array.isArray((await compareResponse.json()).diff.events));
   });
 
+  await t.test("[MTL-04, MTL-05, MTL-10] MAC timeline index, detail, validation, and split branches are available", async () => {
+  const indexResponse = await fetch(`http://127.0.0.1:${address.port}/api/mac-timelines`);
+  assert.equal(indexResponse.status, 200);
+  const index = await indexResponse.json();
+  assert.ok(index.items.some((item) => item.mac === "02:00:00:00:00:18"));
+  assert.equal(index.retention.maximumSnapshotCount, 50);
+
+  const detailResponse = await fetch(`http://127.0.0.1:${address.port}/api/mac-timelines/${encodeURIComponent("02-00-00-00-00-18")}`);
+  assert.equal(detailResponse.status, 200);
+  const detail = await detailResponse.json();
+  assert.equal(detail.mac, "02:00:00:00:00:18");
+  assert.ok(detail.entries.some((entry) => entry.branches.length > 1));
+
+  const invalidResponse = await fetch(`http://127.0.0.1:${address.port}/api/mac-timelines/not-a-mac`);
+  assert.equal(invalidResponse.status, 400);
+  const missingResponse = await fetch(`http://127.0.0.1:${address.port}/api/mac-timelines/${encodeURIComponent("02:00:00:00:00:ff")}`);
+  assert.equal(missingResponse.status, 404);
+  });
+
   await t.test("[API-03, TCP-09, UDP-01] service presets are exposed", async () => {
   const presetsResponse = await fetch(`http://127.0.0.1:${address.port}/api/tcp-service-presets`);
   assert.equal(presetsResponse.status, 200);

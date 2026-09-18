@@ -216,6 +216,7 @@
               <p class="drawer-subtitle" id="drawer-subtitle"></p>
               <div class="confidence-badge" id="drawer-confidence"></div>
               <dl class="detail-list" id="drawer-metadata"></dl>
+              <button class="table-link hidden" id="drawer-mac-timeline" type="button">View MAC timeline</button>
               <section class="drawer-identity-section hidden" id="drawer-identity-section">
                 <div class="drawer-section-heading"><h4>Identity review</h4><span>Review</span></div>
                 <p id="drawer-identity-copy"></p>
@@ -381,15 +382,31 @@
         <section class="panel history-panel hidden" id="history-section">
           <div class="panel-header">
             <div><p class="section-kicker">Saved observations</p><h2>History timeline</h2></div>
+            <div class="history-view-tabs" role="group" aria-label="History view">
+              <button class="button secondary active" id="history-observations-tab" type="button" aria-pressed="true">Observations</button>
+              <button class="button secondary" id="history-mac-tab" type="button" aria-pressed="false">Devices by MAC</button>
+            </div>
           </div>
-          <div class="history-compare">
-            <label>From<select id="history-from"></select></label>
-            <span aria-hidden="true">→</span>
-            <label>To<select id="history-to"></select></label>
-            <button class="button primary" id="compare-history" type="button">Compare</button>
+          <div id="history-observations-view">
+            <div class="history-compare">
+              <label>From<select id="history-from"></select></label>
+              <span aria-hidden="true">→</span>
+              <label>To<select id="history-to"></select></label>
+              <button class="button primary" id="compare-history" type="button">Compare</button>
+            </div>
+            <div class="history-result" id="history-result"></div>
+            <ol class="history-timeline" id="history-timeline"></ol>
           </div>
-          <div class="history-result" id="history-result"></div>
-          <ol class="history-timeline" id="history-timeline"></ol>
+          <div class="mac-history-view hidden" id="history-mac-view">
+            <div class="mac-history-picker">
+              <label for="mac-timeline-selector">Device MAC</label>
+              <input id="mac-timeline-selector" type="search" list="mac-timeline-options" placeholder="Search MAC, device, or manufacturer" autocomplete="off" spellcheck="false">
+              <datalist id="mac-timeline-options"></datalist>
+            </div>
+            <div class="mac-timeline-status" id="mac-timeline-status" role="status">Open this view to load retained MAC history.</div>
+            <section class="mac-timeline-summary hidden" id="mac-timeline-summary" aria-label="Selected MAC summary"></section>
+            <ol class="mac-timeline-list" id="mac-timeline-list"></ol>
+          </div>
         </section>
 
         <section class="panel automation-panel hidden" id="automation-section">

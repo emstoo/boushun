@@ -217,6 +217,26 @@ Fixtures include an unchanged STALE neighbor, REACHABLE/PERMANENT/NOARP entries,
 | TOP-15 | P2 | Zoom, pan, convert coordinates, and hit limits | Preserve the pointer center, clamp scale to 0.35–4, and restore defaults on reset |
 | TOP-16 | P1 | Load the built-in demo without external collection | Produce an internally consistent state with valid evidence references, evidence-backed physical links, a logical Internet path, and representative confidence levels in every topology view |
 
+#### MAC-centered device timeline
+
+| ID | Priority | Condition or action | Expected result |
+|---|---:|---|---|
+| MTL-01 | P1 | Normalize colon, hyphen, compact, mixed-case, malformed, short, and long MAC input | Equivalent valid API forms produce one canonical MAC; invalid forms are rejected, while collector normalization remains compatible with existing observations |
+| MTL-02 | P1 | The same explicitly observed MAC has different IPs in successive snapshots | One selected timeline contains both points and qualifies the address change as occurring since the previous observation |
+| MTL-03 | P0 | An IP-only observation precedes the first explicit MAC observation | The earlier record is not backfilled into the MAC timeline |
+| MTL-04 | P0 | One MAC maps to multiple projected devices in one snapshot | API and UI retain separate branches and show an identity warning |
+| MTL-05 | P0 | A manual split creates branches with the same observed MAC | The timeline preserves the split and never re-merges branches by MAC |
+| MTL-06 | P1 | A manual merge or device override applies to retained history | The current projection is shown consistently while raw snapshots remain unchanged |
+| MTL-07 | P0 | Cache data is retrieved again without a direct response | Retrieval advances only as supported by the snapshot; response time and count do not advance |
+| MTL-08 | P0 | The selected MAC is absent from one or more snapshots | No offline, disconnected, or removal claim is emitted |
+| MTL-09 | P1 | A direct ICMP, TCP, UDP, SNMPv3, mDNS, or SSDP response belongs to a matching address | Method, address, optional port, evidence IDs, and original response time remain scoped and deduplicated |
+| MTL-10 | P1 | Request an empty index, unknown valid MAC, invalid MAC, and populated timeline | Return the documented empty, `404`, `400`, and success contracts without mutation |
+| MTL-11 | P1 | Open the feature from History and from an Inventory device | Both paths select the same canonical MAC and render the same data |
+| MTL-12 | P1 | Use keyboard navigation, narrow viewport, and identity warnings | Controls remain operable and all meanings remain available without color or hover |
+| MTL-13 | P0 | Build and load the public static fixture | Only synthetic MAC data is captured; timeline GETs work without a live API and mutations remain disabled |
+| MTL-14 | P1 | Retained history reaches the configured maximum | Results remain bounded and label the oldest timestamp as retained history rather than complete lifetime history |
+| MTL-15 | P0 | Inspect timeline responses with credential-bearing source fixtures | No credential value or raw sensitive source content appears |
+
 ### 5.8 Asynchronous jobs, schedules, and notifications
 
 | ID | Priority | Condition or action | Expected result |
@@ -408,7 +428,7 @@ Any P0 failure blocks completion. Do not accept an unexplained timeout merely be
 
 The [CI workflow](../.github/workflows/ci.yml) runs three job groups; the Node.js group expands into the supported-version matrix:
 
-1. `npm run check` on Node.js 22.0.0 and the latest releases of the supported 22, 24, and 26 lines for syntax, unit, component, store, and loopback API tests. This includes a fixed-clock static-demo build test that captures projected synthetic API responses, verifies representative TCP/UDP and history data, checks shared-asset/runtime selection and export files, and asserts the read-only fixture contract. Runtime unit tests cover live JSON requests, layout persistence, static mutation rejection, shared fixture loading with independent response objects, request/body deadlines, invalid fixtures, and export targets.
+1. `npm run check` on Node.js 22.0.0 and the latest releases of the supported 22, 24, and 26 lines for syntax, unit, component, store, and loopback API tests. This includes a fixed-clock static-demo build test that captures projected synthetic API responses, verifies representative TCP/UDP, snapshot-history, and MAC-timeline data, checks shared-asset/runtime selection and export files, and asserts the read-only fixture contract. Runtime unit tests cover live JSON requests, layout persistence, static mutation rejection, shared fixture loading with independent response objects, request/body deadlines, invalid fixtures, and export targets.
 2. Browser acceptance first runs `npm run verify:screenshots` against the committed README images, before any regeneration can overwrite them. It then runs `npm run test:e2e` in Chromium against the fixed-clock synthetic server and generated static site. Static cases cover root and `/boushun/` hosting, primary navigation, render-time capability restrictions, fixture failures and reload recovery, JSON/CSV downloads, and no live `/api/*` requests or console/page errors during normal use. The shared smoke contract is exercised locally, including unavailable-fixture and mismatched-export cases, without contacting Pages. After acceptance, CI uploads the Pages preview image, runs `npm run screenshots`, and validates the regenerated images with `npm run verify:screenshots`. PNG checks cover structure, expected width, minimum height, and absence of textual metadata; exact bytes are not compared across operating systems because browser rendering and fonts vary by runner.
 3. `npm run test:container` builds the production image and validates the production Compose host-network configuration. Runtime checks share a disconnected synthetic fixture's network namespace: explicit local configuration loading must discover its dummy interface, ICMP must succeed, and a TCP scan must find its service. The application retains its non-root user, read-only root filesystem, `NET_RAW`-only capability boundary, health check, persistent volume, and restricted temporary filesystem. Writes to the root filesystem and execution from `/tmp` must actually fail. Recreating the application container must preserve exported state and layout. After reset, another recreation must preserve the empty state; loading local configuration adds only the probe and configured ranges. Only the isolated fixture receives `NET_ADMIN` to create the dummy interface; neither container can reach the host LAN. The script ignores local overrides and `.env`, refuses an existing `boushun-ci` project or data volume, and removes its synthetic containers and volume on completion or test failure.
 

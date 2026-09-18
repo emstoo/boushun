@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import os from "node:os";
 import { assertSafeScanCIDR, hostAddresses, parseCIDR } from "../domain/ipv4.js";
 import { resolveInterfacePolicy } from "../domain/interface-policy.js";
+import { normalizeMac } from "../domain/mac.js";
 import { runCommand } from "../lib/command.js";
 
 const DEFAULT_DHCP_LEASE_PATHS = [
@@ -562,13 +563,6 @@ function settledValue(result, warnings, context, fallback) {
   if (result.status === "fulfilled") return result.value;
   warnings.push(`${context}: ${safeMessage(result.reason)}`);
   return fallback;
-}
-
-function normalizeMac(value) {
-  if (typeof value !== "string") return null;
-  const compact = value.toLowerCase().replace(/[^0-9a-f]/g, "");
-  if (!/^[0-9a-f]{12}$/.test(compact)) return null;
-  return compact.match(/.{2}/g).join(":");
 }
 
 function isFailedState(state) {
