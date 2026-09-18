@@ -28,7 +28,7 @@ Boushun 0.1.0 provides:
 - A sticky global scan status showing scan type, target, phase, completed/total checks, discoveries, elapsed time, percentage, and cancellation from every screen.
 - Manual device name, role, tags, merge, and IP split projections with an audit trail.
 - Semantic diffs for device identity, IP assignment, services, and links; ARP state-only churn is ignored.
-- A MAC-centered device timeline over retained snapshots, reachable from History and Inventory, that keeps shared-MAC and manual-split branches separate and never treats absence as proof that a device is offline.
+- A MAC-centered device timeline over retained snapshots, reachable from History and Inventory, that keeps shared-MAC and manual-split branches separate and presents missing observations as unknown connectivity.
 - Full database export, validated import preview, and confirmed reset with automatic rolling pre-change backups. Reset remains empty after reload or restart, including the local demo; local configuration loading restores only the probe and eligible ranges.
 - Zoom, pan, viewport reset, node pinning, search, JSON/SVG export, and atomic local storage.
 

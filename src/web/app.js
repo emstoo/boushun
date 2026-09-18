@@ -1204,12 +1204,12 @@ function renderMacTimeline() {
   }
   if (!items.length) {
     dom["mac-timeline-status"].textContent = state.history.length
-      ? "Retained observations contain no MAC-based identities. Address-only observations are not inferred into this view."
+      ? "Retained observations contain address-only identities. This view lists explicit MAC associations."
       : "No observations are saved. Load local configuration or run an explicit collection to create retained history.";
     return;
   }
   if (!state.selectedMac) {
-    dom["mac-timeline-status"].textContent = "Choose a MAC to inspect its retained observations. Absence from a snapshot does not mean the device was offline.";
+    dom["mac-timeline-status"].textContent = "Choose a MAC to inspect its retained observations. Connectivity remains unknown for snapshots without this MAC.";
     return;
   }
   if (!state.macTimeline) {

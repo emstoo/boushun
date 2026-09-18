@@ -53,12 +53,12 @@ Reset clears observations, history, overrides, layout, interface policies, sched
 
 ## MAC-centered history
 
-MAC timeline endpoints are read-only projections over retained raw snapshots. A
-MAC is a query and presentation axis, not a device primary key. Each snapshot is
-projected independently with the current overrides and interface settings, so a
-source retained by Current-state composition is not presented as newly retrieved
-in later snapshots. Earlier IP-only observations are not backfilled when a later
-snapshot learns a MAC.
+MAC timeline endpoints use canonical MAC addresses as a read-only query and
+presentation axis over retained raw snapshots. Each snapshot is projected
+independently with the current overrides and interface settings. A timeline
+begins at the first retained snapshot whose projected interface explicitly
+carries the selected MAC, and each entry keeps that snapshot's retrieval
+provenance.
 
 `GET /api/mac-timelines` returns `retention` and an `items` array. Each item has a
 canonical lowercase colon-separated `mac`, preferred label, manufacturer,
@@ -73,9 +73,10 @@ and qualified changes since the previous observation of that branch. Manual
 splits and shared-MAC cases remain separate branches. Invalid input returns
 `400`; a valid MAC absent from retained projected history returns `404`.
 
-The endpoints never expose raw evidence bodies. A missing snapshot entry, an
-address no longer represented at a later observation, or a lack of direct
-response is not an offline or disconnection event.
+Responses contain projected identity fields, addresses, timestamps, and scoped
+direct-response metadata. Connectivity remains unknown when a snapshot has no
+entry for the MAC, an address leaves a later projection, or direct-response
+evidence is absent.
 
 ## Example
 

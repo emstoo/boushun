@@ -223,16 +223,16 @@ Fixtures include an unchanged STALE neighbor, REACHABLE/PERMANENT/NOARP entries,
 |---|---:|---|---|
 | MTL-01 | P1 | Normalize colon, hyphen, compact, mixed-case, malformed, short, and long MAC input | Equivalent valid API forms produce one canonical MAC; invalid forms are rejected, while collector normalization remains compatible with existing observations |
 | MTL-02 | P1 | The same explicitly observed MAC has different IPs in successive snapshots | One selected timeline contains both points and qualifies the address change as occurring since the previous observation |
-| MTL-03 | P0 | An IP-only observation precedes the first explicit MAC observation | The earlier record is not backfilled into the MAC timeline |
+| MTL-03 | P0 | An IP-only observation precedes the first explicit MAC observation | The MAC timeline starts at the first explicit MAC association |
 | MTL-04 | P0 | One MAC maps to multiple projected devices in one snapshot | API and UI retain separate branches and show an identity warning |
-| MTL-05 | P0 | A manual split creates branches with the same observed MAC | The timeline preserves the split and never re-merges branches by MAC |
+| MTL-05 | P0 | A manual split creates branches with the same observed MAC | The timeline preserves the split as separate branches |
 | MTL-06 | P1 | A manual merge or device override applies to retained history | The current projection is shown consistently while raw snapshots remain unchanged |
-| MTL-07 | P0 | Cache data is retrieved again without a direct response | Retrieval advances only as supported by the snapshot; response time and count do not advance |
-| MTL-08 | P0 | The selected MAC is absent from one or more snapshots | No offline, disconnected, or removal claim is emitted |
+| MTL-07 | P0 | Cache data is retrieved again without a direct response | Retrieval and response fields retain their separate evidence-derived times and counts |
+| MTL-08 | P0 | The selected MAC is absent from one or more snapshots | Connectivity state remains unknown for the missing observation points |
 | MTL-09 | P1 | A direct ICMP, TCP, UDP, SNMPv3, mDNS, or SSDP response belongs to a matching address | Method, address, optional port, evidence IDs, and original response time remain scoped and deduplicated |
-| MTL-10 | P1 | Request an empty index, unknown valid MAC, invalid MAC, and populated timeline | Return the documented empty, `404`, `400`, and success contracts without mutation |
+| MTL-10 | P1 | Request an empty index, unknown valid MAC, invalid MAC, and populated timeline | Return the documented read-only empty, `404`, `400`, and success contracts |
 | MTL-11 | P1 | Open the feature from History and from an Inventory device | Both paths select the same canonical MAC and render the same data |
-| MTL-12 | P1 | Use keyboard navigation, narrow viewport, and identity warnings | Controls remain operable and all meanings remain available without color or hover |
+| MTL-12 | P1 | Use keyboard navigation, narrow viewport, and identity warnings | Controls remain operable and all meanings are conveyed through text and focus in addition to color and hover |
 | MTL-13 | P0 | Build and load the public static fixture | Only synthetic MAC data is captured; timeline GETs work without a live API and mutations remain disabled |
 | MTL-14 | P1 | Retained history reaches the configured maximum | Results remain bounded and label the oldest timestamp as retained history rather than complete lifetime history |
 | MTL-15 | P0 | Inspect timeline responses with credential-bearing source fixtures | No credential value or raw sensitive source content appears |

@@ -3,8 +3,8 @@ const HYPHENATED_MAC = /^(?:[0-9a-f]{2}-){5}[0-9a-f]{2}$/;
 const COMPACT_MAC = /^[0-9a-f]{12}$/;
 
 /**
- * Normalizes collector input without narrowing the formats accepted before this
- * utility was shared. Invalid input returns null.
+ * Normalizes the input formats supported by the collectors. Invalid input
+ * returns null.
  */
 export function normalizeMac(value) {
   if (typeof value !== "string") return null;
@@ -13,8 +13,8 @@ export function normalizeMac(value) {
 }
 
 /**
- * Validates operator/API input. Only canonical, hyphenated, and compact forms
- * are accepted so arbitrary punctuation is not silently discarded.
+ * Validates operator/API input against canonical, hyphenated, and compact
+ * forms. Invalid input returns null.
  */
 export function normalizeMacInput(value) {
   if (typeof value !== "string") return null;
