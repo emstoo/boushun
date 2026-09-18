@@ -7,6 +7,31 @@ import { collectDemo } from "../src/collectors/demo.js";
 import { createBoushunServer } from "../src/server.js";
 import { waitForCompletedScan } from "./helpers/wait-for-scan.js";
 
+test("[NET-05, UI-13] state retains an allowed candidate narrower than its interface CIDR", async (t) => {
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "boushun-narrow-candidate-"));
+  const { server } = await createBoushunServer({
+    allowedCIDRs: ["192.168.50.30/32"],
+    host: "127.0.0.1",
+    port: 0,
+    dataDirectory: temporaryDirectory,
+    demo: true,
+    collector: async () => {
+      const snapshot = collectDemo();
+      snapshot.scanCandidates = ["192.168.50.30/32"];
+      return snapshot;
+    },
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  });
+
+  const address = server.address();
+  const payload = await (await fetch(`http://127.0.0.1:${address.port}/api/state`)).json();
+  assert.deepEqual(payload.snapshot.scanCandidates, ["192.168.50.30/32"]);
+});
+
 test("HTTP integration contract", async (t) => {
   const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "boushun-test-"));
   let tcpOpen = true;
@@ -128,6 +153,29 @@ test("HTTP integration contract", async (t) => {
   assert.equal(updatedState.overrides.audit.at(-1).action, "device.override");
   });
 
+  await t.test("[INV-17] invalid identity operations and unavailable recommendations leave overrides unchanged", async () => {
+  const before = await (await fetch(`http://127.0.0.1:${address.port}/api/overrides`)).json();
+  const invalidMerge = await fetch(`http://127.0.0.1:${address.port}/api/overrides/merge`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sourceIds: ["device:router"] }),
+  });
+  assert.equal(invalidMerge.status, 400);
+  const invalidSplit = await fetch(`http://127.0.0.1:${address.port}/api/overrides/split`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sourceId: "device:router", targetId: "device:manual:empty", addresses: [] }),
+  });
+  assert.equal(invalidSplit.status, 400);
+  const unavailable = await fetch(
+    `http://127.0.0.1:${address.port}/api/devices/${encodeURIComponent("device:router")}/recommended-split`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+  );
+  assert.equal(unavailable.status, 409);
+  const after = await (await fetch(`http://127.0.0.1:${address.port}/api/overrides`)).json();
+  assert.deepEqual(after, before);
+  });
+
   await t.test("[API-03, INV-06, INV-07] interface policies persist independently", async () => {
   const policyResponse = await fetch(`http://127.0.0.1:${address.port}/api/settings/interfaces/${encodeURIComponent("docker0")}`, {
     method: "PUT",
@@ -137,6 +185,18 @@ test("HTTP integration contract", async (t) => {
   assert.equal(policyResponse.status, 200);
   const settings = await (await fetch(`http://127.0.0.1:${address.port}/api/settings`)).json();
   assert.equal(settings.interfaces.docker0.identity, false);
+  const disableScan = await fetch(`http://127.0.0.1:${address.port}/api/settings/interfaces/eth0`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ map: true, identity: true, scan: false }),
+  });
+  assert.equal(disableScan.status, 200);
+  assert.deepEqual((await (await fetch(`http://127.0.0.1:${address.port}/api/state`)).json()).snapshot.scanCandidates, []);
+  await fetch(`http://127.0.0.1:${address.port}/api/settings/interfaces/eth0`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ map: true, identity: true, scan: true }),
+  });
   });
 
   await t.test("[API-02, TOP-10] history detail and arbitrary comparison are available", async () => {

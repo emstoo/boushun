@@ -55,6 +55,64 @@ test("[TCP-05, TCP-07] TCP service discovery checks every usable IP without ICMP
   assert.equal(result.source.status, "connected");
 });
 
+test("[TCP-06] TCP discovery keeps open, refused, timeout, unreachable, and unknown outcomes distinct", async () => {
+  const states = new Map([
+    [1, "open"],
+    [2, "closed"],
+    [3, "filtered-or-unreachable"],
+    [4, "unreachable"],
+    [5, "unexpected-connector-state"],
+  ]);
+  const result = await collectTcpServices({
+    cidr: "192.168.50.7/32",
+    allowedCIDRs: ["192.168.50.0/24"],
+    ports: [...states.keys()],
+    connector: async (_address, port) => ({ state: states.get(port), latencyMs: port }),
+    observedAt: "2026-08-21T00:00:00.000Z",
+  });
+
+  assert.deepEqual(result.outcomeCounts, {
+    open: 1,
+    closed: 1,
+    "filtered-or-unreachable": 1,
+    unreachable: 1,
+    error: 1,
+  });
+  assert.deepEqual(result.endpoints.map((item) => item.port), [1]);
+  assert.equal(result.openCount, 1);
+  assert.equal(result.attemptCount, 5);
+});
+
+test("[TCP-10] out-of-order TCP workers retain deterministic results and bounded progress", async () => {
+  const gates = new Map();
+  const progress = [];
+  const pending = collectTcpServices({
+    cidr: "192.168.50.0/30",
+    allowedCIDRs: ["192.168.50.0/24"],
+    ports: [80, 443],
+    concurrency: 4,
+    connector: (address, port) => new Promise((resolve) => {
+      gates.set(`${address}:${port}`, resolve);
+    }),
+    onProgress: (item) => progress.push(structuredClone(item)),
+    observedAt: "2026-08-21T00:00:00.000Z",
+  });
+
+  while (gates.size < 4) await new Promise((resolve) => setImmediate(resolve));
+  for (const key of [...gates.keys()].reverse()) gates.get(key)({ state: "open", latencyMs: 1 });
+  const result = await pending;
+
+  assert.deepEqual(result.endpoints.map((item) => `${item.address}:${item.port}`), [
+    "192.168.50.1:80",
+    "192.168.50.1:443",
+    "192.168.50.2:80",
+    "192.168.50.2:443",
+  ]);
+  assert.deepEqual(progress.map((item) => item.completed), [0, 1, 2, 3, 4]);
+  assert.ok(progress.every((item) => item.total === 4 && item.completed <= item.total));
+  assert.equal(progress.at(-1).metrics.openCount, 4);
+});
+
 test("[NET-03, NET-05, TCP-04] invalid TCP scope or port limits open zero connections", async () => {
   let calls = 0;
   const connector = async () => {

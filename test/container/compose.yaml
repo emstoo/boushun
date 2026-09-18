@@ -3,12 +3,18 @@ services:
   boushun:
     network_mode: service:fixture
     restart: "no"
+    environment:
+      BOUSHUN_SNMP_CONFIG: /run/boushun-inputs/snmp.json
+      KUBECONFIG: /run/boushun-inputs/kubeconfig
+      BOUSHUN_CONTROLLER_SNAPSHOT_PATHS: /run/boushun-inputs/controller.json
+      BOUSHUN_DHCP_LEASE_PATHS: /run/boushun-inputs/dnsmasq.leases
     depends_on:
       fixture:
         condition: service_healthy
     volumes:
       - ./test/container:/acceptance:ro
       - ./test/container/resolv.conf:/etc/resolv.conf:ro
+      - ./test/container/inputs:/run/boushun-inputs:ro
 
   fixture:
     image: boushun-ci-boushun

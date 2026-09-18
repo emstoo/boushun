@@ -112,6 +112,43 @@ test("[COL-12, INV-02, INV-04] current state retains the latest dataset from eve
   assert.equal(udp.tcpServices, undefined);
 });
 
+test("[INV-03] repeated identity observations merge evidence, sources, addresses, and confidence", () => {
+  const response = snapshot("1", "standard", {
+    devices: [{
+      id: "device:response",
+      mac: "02:00:00:00:00:42",
+      addresses: ["192.168.50.42"],
+      name: "observed.test",
+      role: "host",
+      identityConfidence: "verified",
+      evidenceIds: ["evidence:response"],
+      source: "icmp-echo",
+    }],
+    scan: { method: "icmp-echo", cidr: "192.168.50.0/24", responsiveCount: 1 },
+  });
+  const passive = snapshot("2", "passive", {
+    devices: [{
+      id: "device:cache",
+      mac: "02:00:00:00:00:42",
+      addresses: ["192.168.50.42", "192.168.50.43"],
+      name: null,
+      role: "host",
+      identityConfidence: "weak",
+      evidenceIds: ["evidence:cache"],
+      source: "neighbor-cache",
+    }],
+  });
+
+  const current = composeCurrentSnapshot([response, passive]);
+  const device = current.devices.find((item) => item.mac === "02:00:00:00:00:42");
+  assert.equal(current.devices.filter((item) => item.mac === device.mac).length, 1);
+  assert.deepEqual(device.addresses, ["192.168.50.42", "192.168.50.43"]);
+  assert.deepEqual(device.evidenceIds.sort(), ["evidence:cache", "evidence:response"]);
+  assert.deepEqual(device.sourceKinds.sort(), ["icmp-echo", "neighbor-cache"]);
+  assert.equal(device.identityConfidence, "verified");
+  assert.equal(device.name, "observed.test");
+});
+
 test("[TOP-10] current state can be projected at any point in history", () => {
   const passive = snapshot("1", "passive", {
     sources: [{ id: "local-network", status: "connected", recordCount: 1 }],

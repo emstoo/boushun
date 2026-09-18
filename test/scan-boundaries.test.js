@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, unlink, rmdir } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, unlink, rmdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { collectDemo } from "../src/collectors/demo.js";
@@ -30,6 +30,22 @@ test("[NET-05] unconfigured ICMP, TCP and UDP collectors never probe", async () 
     await assert.rejects(collectUdpServices({ ...options, ports: [53], prober: probe }), /BOUSHUN_ALLOWED_CIDRS/);
   }
   assert.equal(probes, 0);
+});
+
+test("[DEP-04] Compose requires an allowlist and a narrower runtime allowlist rejects the scan", async () => {
+  const compose = await readFile(new URL("../compose.yaml", import.meta.url), "utf8");
+  assert.match(compose, /BOUSHUN_ALLOWED_CIDRS:\s*\$\{BOUSHUN_ALLOWED_CIDRS:\?/);
+  let connections = 0;
+  await assert.rejects(collectTcpServices({
+    cidr: "192.168.50.0/24",
+    allowedCIDRs: ["192.168.50.0/25"],
+    ports: [80],
+    connector: async () => {
+      connections += 1;
+      return { state: "closed" };
+    },
+  }), /BOUSHUN_ALLOWED_CIDRS/);
+  assert.equal(connections, 0);
 });
 
 test("[NET-05, API-03, SCH-01] unset and blank environment allowlists reject service scans and schedules", async (t) => {

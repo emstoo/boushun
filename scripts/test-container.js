@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 
+// Requirements: DEP-01, DEP-02, DEP-03, DEP-05, DEP-10
 const env = { ...process.env, BOUSHUN_ALLOWED_CIDRS: "192.168.50.1/32", BOUSHUN_PORT: "45177" };
 // Explicit files exclude local Compose overrides and .env. The fixed project must be unused.
 const base = ["compose", "--env-file", "/dev/null", "--project-name", "boushun-ci", "--file", "compose.yaml"];
@@ -106,6 +107,7 @@ try {
   assert.equal(await inspect(id, "{{json .HostConfig.CapAdd}}"), '["CAP_NET_RAW"]');
   assert.equal(await inspect(id, "{{.State.Health.Status}}"), "healthy");
   assert.equal(await inspect(id, '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Type}}:{{.RW}}{{end}}{{end}}'), "volume:true");
+  assert.equal(await inspect(id, '{{range .Mounts}}{{if eq .Destination "/run/boushun-inputs"}}{{.Type}}:{{.RW}}{{end}}{{end}}'), "bind:false");
   const tmpfs = (await inspect(id, '{{index .HostConfig.Tmpfs "/tmp"}}')).split(",");
   assert.ok(tmpfs.includes("noexec") && tmpfs.includes("nosuid") && tmpfs.includes("size=16m"));
   console.log(await compose("exec", "--no-TTY", "boushun", "node", "/acceptance/verify.mjs", "before"));

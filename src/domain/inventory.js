@@ -1,4 +1,5 @@
 import { containsIPv4 } from "./ipv4.js";
+import { orderedIdentityOperations } from "./identity-operations.js";
 import { resolveInterfacePolicy } from "./interface-policy.js";
 import { annotateObservations, currentResponses, observationChecks } from "./observation.js";
 
@@ -159,8 +160,7 @@ export function buildInventory(snapshot, overrides = EMPTY_OVERRIDES, settings =
   applyUdpServices(snapshot.udpServices, { devices, interfaces, assignments, services });
   applyExternalServices(snapshot.controller?.services, { assignments, services });
   applyDiscovery(snapshot.discovery, { devices, assignments });
-  applySplits(overrides.splits, { devices, interfaces, assignments });
-  applyMerges(overrides.merges, { devices, interfaces, assignments });
+  applyIdentityOperations(overrides, { devices, interfaces, assignments });
   applyDeviceOverrides(overrides.devices, devices);
   annotateDeviceIdentities(snapshot, { devices, interfaces, assignments });
   annotateObservations(snapshot, { devices, assignments, services });
@@ -487,6 +487,13 @@ function applyMerges(merges, { devices, interfaces, assignments }) {
       if (sourceIds.includes(item.deviceId)) item.deviceId = targetId;
       item.advertisedByDeviceIds = (item.advertisedByDeviceIds ?? []).map((id) => sourceIds.includes(id) ? targetId : id);
     }
+  }
+}
+
+function applyIdentityOperations(overrides, projection) {
+  for (const { kind, operation } of orderedIdentityOperations(overrides)) {
+    if (kind === "merge") applyMerges([operation], projection);
+    else applySplits([operation], projection);
   }
 }
 

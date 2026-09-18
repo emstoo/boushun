@@ -173,6 +173,13 @@ function renderAll() {
   populateUdpServicePresets(state.payload.udpServicePresets ?? []);
   renderAutomation(state.payload.serviceSchedules ?? [], state.payload.notifications ?? []);
   renderDatabase(state.payload.database);
+  if (state.selected) {
+    const selected = state.selected.kind === "node"
+      ? topology.nodes.find((item) => item.id === state.selected.id)
+      : topology.links.find((item) => item.id === state.selected.id);
+    if (selected) openDetail(selected, state.selected.kind);
+    else closeDrawer();
+  }
 }
 
 function renderDatabase(summary) {

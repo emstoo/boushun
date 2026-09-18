@@ -59,6 +59,87 @@ test("[COL-06] dnsmasq, ISC and Kea lease formats are normalized", () => {
   assert.equal(parseLeaseDocument('[{"ip-address":"192.168.1.4","hw-address":"aa:bb:cc:dd:ee:02","hostname":"tv"}]')[0].address, "192.168.1.4");
 });
 
+test("[COL-02] a failed local command preserves successful facts and reports degraded health safely", async () => {
+  const marker = "/private/operator/network/path";
+  const runner = async (_command, args) => {
+    const signature = args.join(" ");
+    if (signature === "-json address show") return { stdout: JSON.stringify(ADDRESS_FIXTURE), stderr: "" };
+    if (signature === "-json route show table main") {
+      throw Object.assign(new Error(`permission denied: ${marker}`), { code: "EACCES" });
+    }
+    if (signature === "-json neigh show") return { stdout: JSON.stringify(NEIGHBOR_FIXTURE), stderr: "" };
+    throw new Error(`Unexpected command: ${signature}`);
+  };
+  const snapshot = await collectLinux({ profile: "passive", runner, textReader: async () => "" });
+
+  assert.equal(snapshot.interfaces.some((item) => item.name === "eth0"), true);
+  assert.equal(snapshot.devices.some((item) => item.addresses.includes("192.168.44.2")), true);
+  assert.equal(snapshot.routes.length, 0);
+  assert.equal(snapshot.sources.find((item) => item.id === "local-network").status, "degraded");
+  assert.match(snapshot.warnings.join("\n"), /EACCES/);
+  assert.doesNotMatch(JSON.stringify(snapshot), new RegExp(marker));
+});
+
+test("[COL-03] complete local-command failure returns unavailable health instead of crashing", async () => {
+  const runner = async () => {
+    throw Object.assign(new Error("command unavailable"), { code: "ENOENT" });
+  };
+  const snapshot = await collectLinux({ profile: "passive", runner, textReader: async () => "" });
+
+  assert.deepEqual(snapshot.interfaces, []);
+  assert.deepEqual(snapshot.routes, []);
+  assert.deepEqual(snapshot.devices, []);
+  assert.equal(snapshot.sources.find((item) => item.id === "local-network").status, "unavailable");
+  assert.equal(snapshot.warnings.filter((item) => item.includes("ENOENT")).length, 3);
+});
+
+test("[COL-07] DHCP names win and reverse DNS runs only for unresolved neighbors", async () => {
+  const addresses = structuredClone(ADDRESS_FIXTURE);
+  addresses[1].addr_info[0].prefixlen = 29;
+  const neighbors = [
+    { dst: "192.168.44.2", dev: "eth0", lladdr: "02:00:00:00:00:02", state: ["REACHABLE"] },
+    { dst: "192.168.44.3", dev: "eth0", lladdr: "02:00:00:00:00:03", state: ["STALE"] },
+  ];
+  const reverseCalls = [];
+  const runner = async (command, args) => {
+    const signature = `${command} ${args.join(" ")}`;
+    if (signature === "ip -json address show") return { stdout: JSON.stringify(addresses), stderr: "" };
+    if (signature === "ip -json route show table main") return { stdout: JSON.stringify(ROUTE_FIXTURE), stderr: "" };
+    if (signature === "ip -json neigh show") return { stdout: JSON.stringify(neighbors), stderr: "" };
+    if (command === "ping") throw Object.assign(new Error("no response"), { code: 1 });
+    throw new Error(`Unexpected command: ${signature}`);
+  };
+  const snapshot = await collectLinux({
+    profile: "standard",
+    cidr: "192.168.44.0/29",
+    allowedCIDRs: ["192.168.44.0/29"],
+    runner,
+    dhcpLeasePaths: ["/leases"],
+    textReader: async (filePath) => filePath === "/leases"
+      ? "123 02:00:00:00:00:02 192.168.44.2 dhcp-name *"
+      : "",
+    reverseLookup: async (address) => {
+      reverseCalls.push(address);
+      return [`ptr-${address}.test.`];
+    },
+  });
+
+  assert.deepEqual(reverseCalls, ["192.168.44.3"]);
+  assert.equal(snapshot.devices.find((item) => item.addresses.includes("192.168.44.2")).name, "dhcp-name");
+  assert.equal(snapshot.devices.find((item) => item.addresses.includes("192.168.44.3")).name, "ptr-192.168.44.3.test");
+});
+
+test("[NET-09] default scan range uses the first eligible private or link-local interface", () => {
+  const interfaces = [
+    { name: "public0", state: "UP", addresses: [{ address: "203.0.113.10", prefix: 24 }] },
+    { name: "disabled0", state: "UP", addresses: [{ address: "192.168.20.10", prefix: 24 }] },
+    { name: "link0", state: "UP", addresses: [{ address: "169.254.10.2", prefix: 16 }] },
+    { name: "private0", state: "UP", addresses: [{ address: "10.0.0.4", prefix: 24 }] },
+  ];
+  assert.equal(chooseDefaultScanCIDR(interfaces, { interfaces: { disabled0: { scan: false } } }), "169.254.10.0/24");
+  assert.equal(chooseDefaultScanCIDR(interfaces, { interfaces: { disabled0: { scan: false }, link0: { scan: false } } }), "10.0.0.0/24");
+});
+
 test("[COL-08, COL-09] standard collection probes only the validated host range and records evidence", async () => {
   let neighborReads = 0;
   const commands = [];

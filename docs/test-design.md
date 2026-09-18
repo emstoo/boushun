@@ -97,7 +97,7 @@ Fixtures include an unchanged STALE neighbor, REACHABLE/PERMANENT/NOARP entries,
 | NET-02 | P0 | Provide missing octets, non-digits, octets above 255, missing prefixes, or prefixes above 32 | Input is rejected before reaching any scan operation |
 | NET-03 | P0 | Request a range broader than `/24` | Request is rejected as too broad and sends zero packets |
 | NET-04 | P0 | Request public, loopback, or mixed private/public ranges | Anything outside private or link-local IPv4 is rejected |
-| NET-05 | P0 | Request a range inside, equal to, outside, or partially overlapping an allowed CIDR; omit, empty, or malform the allowlist | Only fully contained ranges with a valid nonempty allowlist are accepted; invalid configuration sends no probes |
+| NET-05 | P0 | Request a range inside, equal to, outside, or partially overlapping an allowed CIDR; omit, empty, or malform the allowlist | Only fully contained ranges with a valid nonempty allowlist are accepted and remain eligible when narrower than the interface CIDR; invalid configuration sends no probes |
 | NET-06 | P0 | Enumerate an ordinary subnet | Network and broadcast are excluded; each usable address appears once |
 | NET-07 | P1 | Enumerate `/31` and `/32` | All addresses defined as usable by the product are returned without overflow or an infinite loop |
 | NET-08 | P1 | Exclude a local address | Only the selected address is excluded; order and remaining addresses are preserved |
@@ -190,7 +190,7 @@ Fixtures include an unchanged STALE neighbor, REACHABLE/PERMANENT/NOARP entries,
 | INV-13 | P1 | Identity is address-only | Provide an informational issue and suggested name without claiming strong identity |
 | INV-14 | P1 | Save manual name, role, and tags | Change only the projection, preserve raw observations, and append an audit record |
 | INV-15 | P1 | Merge 2 to 20 devices | Move device, interface, assignment, and advertiser references consistently to the target |
-| INV-16 | P1 | Apply a manual or recommended split | Move only selected addresses to the new device/interface and keep source/audit state consistent |
+| INV-16 | P1 | Apply manual/recommended splits before or after merges, then truncate the audit log | Move only selected addresses to the new device/interface and preserve merge/split application order independently of audit retention |
 | INV-17 | P1 | Submit an invalid merge/split or request an unavailable recommendation | Reject without changing state or audit records |
 | INV-18 | P0 | Local refresh changes the probe IP from `192.168.50.10` to `.20` after earlier active observations | Current self configuration contains only `.20` and the latest interfaces/routes/ranges. Other devices retain their response evidence; historical self configuration and raw snapshots remain unchanged |
 | INV-19 | P1 | Load local configuration after DNS/DHCP records, then explicitly refresh Passive sources | Local loading retains DNS/DHCP data together with their original source status, snapshot ID, and time. The next Passive update replaces both data and source provenance, including a successful empty result |
@@ -312,7 +312,7 @@ The HTTP endpoint and response-header requirements here apply to the local Boush
 | UI-10 | P1 | Drag nodes, pan, zoom by wheel/buttons, and reset | Avoid accidental clicks and keep pinning separate from viewport movement |
 | UI-11 | P1 | Override, merge, split, or apply a recommended split | Refresh projection and audit after confirmation while preserving raw evidence |
 | UI-12 | P1 | Run target `/32` TCP/UDP rescans and target CSV export | Limit operation to the selected device/VIP/address without broadening to the network |
-| UI-13 | P1 | Toggle map/identity/scan policy for an interface | Reflect saved controls in candidates, inventory, and map according to each policy |
+| UI-13 | P1 | Toggle map/identity/scan policy for an interface whose eligible candidate is equal to or narrower than its CIDR | Reflect saved controls in candidates, inventory, and map according to each policy without dropping contained narrower candidates |
 | UI-14 | P1 | Compare arbitrary history entries | Associate semantic events with the selected snapshot metadata |
 | UI-15 | P0 | Preview→IMPORT, RESET, and database failure paths | Preview is non-mutating; confirmation and active-scan gates are explicit; failures remain recoverable |
 | UI-16 | P1 | Create/update/delete/run/toggle schedules and read notifications | Keep API state, badges, and lists synchronized without double submission |
@@ -371,12 +371,27 @@ The result view represents the last completed check for each scope and method, w
 | REG-02 | P1 | Load live synthetic and static read-only demos. Representative topology, navigation, exports, read-only controls, and privacy checks continue to pass | Existing browser/static suites |
 | DEP-10 | P0 | In the disconnected synthetic Docker fixture, populate/reset/recreate the application and load local configuration. Persistent reset remains empty after recreation; local loading does not restore cached devices; a separately authorized isolated check can add a responding target | Container acceptance |
 
-#### Test coverage mapping
+### 5.14 Requirement coverage and claim rules
+
+Requirement IDs are executable traceability markers, not broad topic labels. An automated test may cite an ID only when that test performs the condition or action in the corresponding row and asserts its complete expected result at the stated boundary. A test that checks only that a control is visible does not cover the workflow performed by that control. A test that exercises only one interaction mode does not cover pointer, keyboard, reload, or failure recovery requirements unless it performs and asserts each named mode.
+
+When one test cites multiple IDs, its assertions must remain attributable to every cited ID. Split the test when one failure would not identify which requirement regressed, or when setup for one scenario can mask another. Regression tests may preserve a defect-specific input, but their oracle must state the durable product behavior rather than the former implementation detail.
+
+Automated coverage uses the following markers:
+
+- Node and browser tests put the covered IDs in the `test()` title.
+- Executable deployment or post-deployment acceptance scripts use an adjacent `Requirements:` comment. Such a marker means the executable procedure performs and asserts the requirement; documentation alone is not sufficient.
+- `REG-*` IDs are aggregate gates and use an `Aggregate requirements:` comment on the CI commands that execute their constituent suites.
+- P0 and P1 IDs must have at least one executable marker. P2 IDs should be automated when a deterministic browser oracle is practical and otherwise need a documented manual acceptance procedure.
+- A Node test validates that every marked ID exists in this design and that every P0/P1 ID has an executable marker. Semantic equivalence between a scenario and its claimed ID remains a review responsibility.
+
+Coverage is intentionally distributed by boundary:
 
 - Collector and evidence behavior: Linux/network/controller collector component tests, plus observation contract tests.
-- Current projection, scoped confirmation, and topology: current-state/inventory/topology tests and observation contract tests.
-- Reset, restart, generation boundaries, presence, and exports: store and loopback server integration tests.
-- Real reset prompt, local recovery, candidate list, status wording, and stale response: browser acceptance against synthetic fixtures.
+- Current projection, scoped confirmation, identity operations, and topology: current-state/inventory/topology/store tests and observation contract tests.
+- Reset, restart, generation boundaries, presence, exports, and mutation failure atomicity: store and loopback server integration tests.
+- Local UI workflows: browser acceptance must perform the mutation, scan, export, filtering, reload, and error-recovery actions rather than infer them from enabled controls.
+- Static-demo UI workflows: browser acceptance verifies rendering, local-only interactions, fail-closed fixture handling, and the absence of live API mutation.
 - Docker persistence and real collector behavior: disconnected container acceptance. Unit mocks and a demo browser do not prove this boundary.
 
 ## 6. Cross-Cutting Invariants
@@ -428,7 +443,7 @@ Any P0 failure blocks completion. Do not accept an unexplained timeout merely be
 
 The [CI workflow](../.github/workflows/ci.yml) runs three job groups; the Node.js group expands into the supported-version matrix:
 
-1. `npm run check` on Node.js 22.0.0 and the latest releases of the supported 22, 24, and 26 lines for syntax, unit, component, store, and loopback API tests. This includes a fixed-clock static-demo build test that captures projected synthetic API responses, verifies representative TCP/UDP, snapshot-history, and MAC-timeline data, checks shared-asset/runtime selection and export files, and asserts the read-only fixture contract. Runtime unit tests cover live JSON requests, layout persistence, static mutation rejection, shared fixture loading with independent response objects, request/body deadlines, invalid fixtures, and export targets.
+1. `npm run check` on Node.js 22.0.0 and the latest releases of the supported 22, 24, and 26 lines for syntax, requirement-traceability, unit, component, store, and loopback API tests. The traceability test checks that every executable marker names a defined requirement and that every P0/P1 requirement has an executable marker; reviewers still verify that each marked scenario performs the complete action and oracle. The suite also includes a fixed-clock static-demo build test that captures projected synthetic API responses, verifies representative TCP/UDP, snapshot-history, and MAC-timeline data, checks shared-asset/runtime selection and export files, and asserts the read-only fixture contract. Runtime unit tests cover live JSON requests, layout persistence, static mutation rejection, shared fixture loading with independent response objects, request/body deadlines, invalid fixtures, and export targets.
 2. Browser acceptance first runs `npm run verify:screenshots` against the committed README images, before any regeneration can overwrite them. It then runs `npm run test:e2e` in Chromium against the fixed-clock synthetic server and generated static site. Static cases cover root and `/boushun/` hosting, primary navigation, render-time capability restrictions, fixture failures and reload recovery, JSON/CSV downloads, and no live `/api/*` requests or console/page errors during normal use. The shared smoke contract is exercised locally, including unavailable-fixture and mismatched-export cases, without contacting Pages. After acceptance, CI uploads the Pages preview image, runs `npm run screenshots`, and validates the regenerated images with `npm run verify:screenshots`. PNG checks cover structure, expected width, minimum height, and absence of textual metadata; exact bytes are not compared across operating systems because browser rendering and fonts vary by runner.
 3. `npm run test:container` builds the production image and validates the production Compose host-network configuration. Runtime checks share a disconnected synthetic fixture's network namespace: explicit local configuration loading must discover its dummy interface, ICMP must succeed, and a TCP scan must find its service. The application retains its non-root user, read-only root filesystem, `NET_RAW`-only capability boundary, health check, persistent volume, and restricted temporary filesystem. Writes to the root filesystem and execution from `/tmp` must actually fail. Recreating the application container must preserve exported state and layout. After reset, another recreation must preserve the empty state; loading local configuration adds only the probe and configured ranges. Only the isolated fixture receives `NET_ADMIN` to create the dummy interface; neither container can reach the host LAN. The script ignores local overrides and `.env`, refuses an existing `boushun-ci` project or data volume, and removes its synthetic containers and volume on completion or test failure.
 

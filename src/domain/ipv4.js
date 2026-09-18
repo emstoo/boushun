@@ -76,6 +76,17 @@ export function containsIPv4(cidr, address) {
   );
 }
 
+export function containsCIDR(containerValue, candidateValue) {
+  const container = typeof containerValue === "string" ? parseCIDR(containerValue) : containerValue;
+  const candidate = typeof candidateValue === "string" ? parseCIDR(candidateValue) : candidateValue;
+  return Boolean(
+    container &&
+      candidate &&
+      candidate.networkInt >= container.networkInt &&
+      candidate.broadcastInt <= container.broadcastInt,
+  );
+}
+
 export function isAllowedLocalIPv4(address) {
   const value = ipv4ToInt(address);
   if (value === null) return false;
@@ -105,8 +116,7 @@ export function assertSafeScanCIDR(value, allowedCIDRs = []) {
   if (allowedRanges.some((allowed) => !allowed)) {
     throw validationError("BOUSHUN_ALLOWED_CIDRS must contain valid IPv4 CIDRs");
   }
-  const permitted = allowedRanges.some((allowed) =>
-    cidr.networkInt >= allowed.networkInt && cidr.broadcastInt <= allowed.broadcastInt);
+  const permitted = allowedRanges.some((allowed) => containsCIDR(allowed, cidr));
   if (!permitted) throw validationError("The requested range is outside BOUSHUN_ALLOWED_CIDRS");
 
   return cidr;

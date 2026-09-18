@@ -48,6 +48,116 @@ test("[DB-05] v1 state migrates on the next mutation and manual overrides are au
   assert.equal(JSON.parse(await readFile(path.join(directory, "state.json"), "utf8")).version, 2);
 });
 
+test("[INV-16] identity operation order migrates and persists independently of retained audit", async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "boushun-identity-order-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const merge = { id: "merge:legacy", sourceIds: ["device:nas", "device:camera"], targetId: "device:nas" };
+  const split = { id: "split:legacy", sourceId: "device:nas", targetId: "device:camera-split", addresses: ["192.168.50.41"] };
+  const audit = [
+    { id: "audit:merge", action: "device.merge", details: merge },
+    { id: "audit:split", action: "device.split", details: split },
+    ...Array.from({ length: 498 }, (_, index) => ({ id: `audit:filler:${index}`, action: "device.override", details: {} })),
+  ];
+  await writeFile(path.join(directory, "state.json"), JSON.stringify({
+    version: 2,
+    snapshots: [],
+    layout: {},
+    overrides: { devices: {}, merges: [merge], splits: [split], audit },
+    settings: { interfaces: {}, serviceSchedules: [] },
+    notifications: [],
+  }), { mode: 0o600 });
+
+  const store = new JsonStore(directory);
+  await store.initialize();
+  assert.deepEqual((await store.read()).overrides.merges.map((operation) => operation.sequence), [1]);
+  assert.deepEqual((await store.read()).overrides.splits.map((operation) => operation.sequence), [2]);
+
+  await store.saveDeviceOverride("device:first", { name: "first" });
+  await store.saveDeviceOverride("device:second", { name: "second" });
+  const persisted = JSON.parse(await readFile(path.join(directory, "state.json"), "utf8"));
+  assert.equal(persisted.overrides.audit.some((entry) => entry.action === "device.merge" || entry.action === "device.split"), false);
+  assert.deepEqual(persisted.overrides.merges.map((operation) => operation.sequence), [1]);
+  assert.deepEqual(persisted.overrides.splits.map((operation) => operation.sequence), [2]);
+
+  const savedMerge = await store.saveMerge({ sourceIds: ["device:a", "device:b"], targetId: "device:a" });
+  const savedSplit = await store.saveSplit({ sourceId: "device:a", targetId: "device:c", addresses: ["192.168.50.10"] });
+  const savedBatch = await store.saveSplitBatch([
+    { sourceId: "device:a", targetId: "device:d", addresses: ["192.168.50.11"] },
+    { sourceId: "device:a", targetId: "device:e", addresses: ["192.168.50.12"] },
+  ]);
+  assert.equal(savedMerge.merge.sequence, 3);
+  assert.equal(savedSplit.split.sequence, 4);
+  assert.deepEqual(savedBatch.splits.map((operation) => operation.sequence), [5, 6]);
+});
+
+test("[TOP-14] layout persistence drops invalid IDs and coordinates and normalizes valid positions", async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "boushun-layout-validation-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const store = new JsonStore(directory);
+  await store.initialize();
+
+  const layout = await store.saveLayout({
+    "logical:valid": { x: 10.6, y: -5 },
+    "services:large": { x: 25_000, y: 19_999.6 },
+    "": { x: 1, y: 2 },
+    ["x".repeat(201)]: { x: 1, y: 2 },
+    "physical:nan": { x: Number.NaN, y: 1 },
+    "physical:string": { x: "1", y: 2 },
+  });
+
+  assert.deepEqual(layout, {
+    "logical:valid": { x: 11, y: 0 },
+    "services:large": { x: 20_000, y: 20_000 },
+  });
+  assert.deepEqual((await store.read()).layout, layout);
+});
+
+test("[DB-15] loading isolates invalid automation entries and enforces retained-state limits", async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "boushun-normalize-limits-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const schedules = Array.from({ length: 12 }, (_, index) => ({
+    id: `schedule:${index}`,
+    protocol: "tcp",
+    cidr: "192.168.50.0/24",
+    preset: "custom",
+    customPorts: "443",
+    intervalMinutes: 60,
+  }));
+  schedules.splice(2, 0, { id: "invalid-schedule" });
+  const notifications = Array.from({ length: 205 }, (_, index) => ({
+    id: `notification:${index}`,
+    fingerprint: `fingerprint:${index}`,
+    type: "new-port",
+    scheduleId: "schedule:0",
+    snapshotId: `snapshot:${index}`,
+    observedAt: "2026-09-18T00:00:00.000Z",
+    protocol: "tcp",
+    address: "192.168.50.2",
+    port: 443,
+  }));
+  notifications.splice(100, 0, { type: "unknown" });
+  const audit = Array.from({ length: 505 }, (_, index) => ({ id: `audit:${index}`, action: "test" }));
+  await writeFile(path.join(directory, "state.json"), JSON.stringify({
+    version: 2,
+    snapshots: [],
+    layout: {},
+    overrides: { devices: {}, merges: [], splits: [], audit },
+    settings: { interfaces: {}, serviceSchedules: schedules },
+    notifications,
+  }), { mode: 0o600 });
+
+  const store = new JsonStore(directory);
+  await store.initialize();
+  const state = await store.read();
+  assert.equal(state.overrides.audit.length, 500);
+  assert.equal(state.overrides.audit[0].id, "audit:5");
+  assert.equal(state.settings.serviceSchedules.length, 10);
+  assert.equal(state.settings.serviceSchedules.some((item) => item.id === "invalid-schedule"), false);
+  assert.equal(state.notifications.length, 200);
+  assert.equal(state.notifications.some((item) => item.type !== "new-port"), false);
+  assert.equal(state.notifications.at(-1).id, "notification:204");
+});
+
 test("[DB-06, DB-07, DB-08, DB-11, DB-13] database maintenance preserves recoverability", async (t) => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "boushun-database-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
