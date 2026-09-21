@@ -1070,9 +1070,8 @@ function renderSources(sources, interfaces) {
 }
 
 async function saveInterfacePolicy(name, key, value) {
-  const current = state.payload.settings?.interfaces?.[name] ?? state.payload.interfaceControls.find((item) => item.name === name)?.policy ?? {};
   try {
-    await api(`/api/settings/interfaces/${encodeURIComponent(name)}`, { method: "PUT", body: { ...current, [key]: value } });
+    await api(`/api/settings/interfaces/${encodeURIComponent(name)}`, { method: "PATCH", body: { [key]: value } });
     await loadState();
     showToast(`${name} interface policy updated.`);
   } catch (error) {

@@ -3,12 +3,13 @@ import { startSyntheticDemoServer } from "./demo-server.js";
 
 let demo;
 
-test.beforeAll(async () => {
+test.beforeEach(async () => {
   demo = await startSyntheticDemoServer();
 });
 
-test.afterAll(async () => {
+test.afterEach(async () => {
   await demo.close();
+  demo = null;
 });
 
 async function openDemo(page) {
@@ -275,6 +276,10 @@ test("[UI-13, UI-19] interface policy persists and a server error restores the c
   await expect(page.locator("#toast")).toContainText("synthetic policy failure");
   await expect(scan).toBeChecked();
   await expect(scan).toBeEnabled();
+  await expect.poll(async () => {
+    const payload = await (await page.request.get(`${demo.baseURL}/api/state`)).json();
+    return payload.settings.interfaces.eth0;
+  }).toEqual({ map: true, identity: true, scan: true });
 });
 
 test("[UI-14] arbitrary history selections render semantic changes for their metadata", async ({ page }) => {

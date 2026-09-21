@@ -125,7 +125,7 @@ export class JsonStore {
       if (typeof name !== "string" || !name.trim() || name.length > 120) throw badRequest("A valid interface name is required");
       const state = await this.#readUnqueued();
       const before = state.settings.interfaces[name] ?? null;
-      const after = sanitizeInterfacePolicy(patch);
+      const after = sanitizeInterfacePolicy({ ...(before ?? {}), ...patch });
       state.settings.interfaces[name] = after;
       appendAudit(state, actor, "interface.policy", { name, before, after });
       await this.#write(state);

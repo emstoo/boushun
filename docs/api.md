@@ -31,7 +31,7 @@ This reference describes the loopback-only Node.js server, including the local s
 | `POST` | `/api/database/reset` | Clear the database after `RESET` confirmation and a local backup |
 | `PUT` | `/api/layout` | Save pinned node positions |
 | `GET` | `/api/settings` | Interface policies |
-| `PUT` | `/api/settings/interfaces/:name` | Control map, identity, and scan participation |
+| `PUT`, `PATCH` | `/api/settings/interfaces/:name` | Control map, identity, and scan participation |
 | `PUT` | `/api/devices/:id/override` | Save name, role, and tags |
 | `POST` | `/api/devices/:id/recommended-split` | Apply the current audited shared-MAC split recommendation |
 | `POST` | `/api/overrides/merge` | Merge device projections |

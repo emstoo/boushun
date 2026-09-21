@@ -90,6 +90,31 @@ test("[INV-16] identity operation order migrates and persists independently of r
   assert.deepEqual(savedBatch.splits.map((operation) => operation.sequence), [5, 6]);
 });
 
+test("[INV-07] concurrent interface policy patches preserve independent controls", async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "boushun-interface-policy-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const store = new JsonStore(directory);
+  await store.initialize();
+
+  await Promise.all([
+    store.saveInterfacePolicy("eth0", { map: false }),
+    store.saveInterfacePolicy("eth0", { identity: false }),
+    store.saveInterfacePolicy("eth0", { scan: false }),
+  ]);
+  assert.deepEqual((await store.read()).settings.interfaces.eth0, {
+    map: false,
+    identity: false,
+    scan: false,
+  });
+
+  await store.saveInterfacePolicy("eth0", { map: true });
+  assert.deepEqual((await store.read()).settings.interfaces.eth0, {
+    map: true,
+    identity: false,
+    scan: false,
+  });
+});
+
 test("[TOP-14] layout persistence drops invalid IDs and coordinates and normalizes valid positions", async (t) => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "boushun-layout-validation-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
