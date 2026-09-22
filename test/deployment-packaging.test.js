@@ -13,7 +13,10 @@ test("[DEP-11] release workflow publishes a hardened multi-platform GHCR image",
 
   assert.match(workflow, /tags:\s*\n\s*- ["']v\*\.\*\.\*["']/);
   assert.match(workflow, /contents: read/);
+  assert.match(workflow, /checks: read/);
   assert.match(workflow, /packages: write/);
+  assert.match(workflow, /group: ghcr-\$\{\{ github\.repository \}\}\s+cancel-in-progress: false\s+queue: max/);
+  assert.match(workflow, /name: Verify main inclusion and required CI/);
   assert.match(workflow, /ghcr\.io\/\$\{\{ github\.repository \}\}/);
   assert.match(workflow, /platforms: linux\/amd64,linux\/arm64/);
   assert.match(workflow, /type=semver,pattern=\{\{version\}\}/);
@@ -22,6 +25,7 @@ test("[DEP-11] release workflow publishes a hardened multi-platform GHCR image",
   assert.match(workflow, /sbom: true/);
   for (const action of [
     "actions/checkout",
+    "actions/github-script",
     "docker/setup-qemu-action",
     "docker/setup-buildx-action",
     "docker/login-action",
@@ -33,20 +37,30 @@ test("[DEP-11] release workflow publishes a hardened multi-platform GHCR image",
 });
 
 test("[DEP-12] Helm chart exposes bounded deployment inputs", async () => {
-  const [chart, values, schema, deployment] = await Promise.all([
+  const [chart, values, schemaSource, deployment, helpers] = await Promise.all([
     source("charts/boushun/Chart.yaml"),
     source("charts/boushun/values.yaml"),
     source("charts/boushun/values.schema.json"),
     source("charts/boushun/templates/deployment.yaml"),
+    source("charts/boushun/templates/_helpers.tpl"),
   ]);
+  const schema = JSON.parse(schemaSource);
 
   assert.match(chart, /apiVersion: v2/);
   assert.match(chart, /type: application/);
   assert.match(values, /repository: ghcr\.io\/emstoo\/boushun/);
+  assert.match(values, /digest: ""/);
   assert.match(values, /allowedCIDRs: \[\]/);
   assert.match(values, /existingClaim: ""/);
   assert.match(values, /extraEnv: \[\]/);
-  assert.doesNotThrow(() => JSON.parse(schema));
+  assert.ok(schema.properties.image.required.includes("digest"));
+  assert.deepEqual(
+    schema.properties.extraEnv.items.not.properties.name.enum,
+    ["BOUSHUN_HOST", "BOUSHUN_PORT", "BOUSHUN_DATA_DIR", "BOUSHUN_ALLOWED_CIDRS"],
+  );
+  assert.match(helpers, /define "boushun\.image"/);
+  assert.match(helpers, /define "boushun\.rbacName"/);
+  assert.match(deployment, /include "boushun\.image"/);
   assert.match(deployment, /BOUSHUN_ALLOWED_CIDRS/);
   assert.match(deployment, /extraVolumeMounts/);
   assert.match(deployment, /extraVolumes/);
@@ -83,5 +97,7 @@ test("[DEP-14] Helm persistence and inventory RBAC stay minimal", async () => {
   assert.match(role, /verbs: \["list"\]/);
   assert.doesNotMatch(role, /secrets/);
   assert.match(binding, /kind: ClusterRoleBinding/);
+  assert.match(role, /include "boushun\.rbacName"/);
+  assert.match(binding, /include "boushun\.rbacName"/);
   assert.match(pvc, /kind: PersistentVolumeClaim/);
 });

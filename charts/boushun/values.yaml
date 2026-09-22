@@ -2,6 +2,7 @@ image:
   repository: ghcr.io/emstoo/boushun
   pullPolicy: IfNotPresent
   tag: ""
+  digest: ""
 
 imagePullSecrets: []
 nameOverride: ""

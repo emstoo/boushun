@@ -7,11 +7,13 @@ on:
 
 permissions:
   contents: read
+  checks: read
   packages: write
 
 concurrency:
-  group: container-${{ github.ref }}
+  group: ghcr-${{ github.repository }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   publish:
@@ -25,6 +27,15 @@ jobs:
           persist-credentials: false
       - name: Verify release versions
         run: node scripts/verify-release-version.js
+      - name: Verify main inclusion and required CI
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RELEASE_ELIGIBILITY_SCRIPT: ${{ github.workspace }}/scripts/verify-release-eligibility.js
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { verifyReleaseEligibility } = await import(process.env.RELEASE_ELIGIBILITY_SCRIPT);
+            await verifyReleaseEligibility({ github, context });
       - name: Set up QEMU
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - name: Set up Docker Buildx

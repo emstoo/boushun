@@ -2,13 +2,13 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "boushun.fullname" . }}
+  name: {{ include "boushun.rbacName" . }}
   labels:
     {{- include "boushun.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ include "boushun.fullname" . }}
+  name: {{ include "boushun.rbacName" . }}
 subjects:
   - kind: ServiceAccount
     name: {{ include "boushun.serviceAccountName" . }}

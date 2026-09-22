@@ -15,6 +15,19 @@
 {{- end }}
 {{- end }}
 
+{{- define "boushun.image" -}}
+{{- if .Values.image.digest -}}
+{{- printf "%s@%s" .Values.image.repository .Values.image.digest -}}
+{{- else -}}
+{{- printf "%s:%s" .Values.image.repository (default .Chart.AppVersion .Values.image.tag) -}}
+{{- end -}}
+{{- end }}
+
+{{- define "boushun.rbacName" -}}
+{{- $base := printf "%s-%s" (include "boushun.fullname" .) .Release.Namespace -}}
+{{- printf "%s-%s" ($base | trunc 54 | trimSuffix "-") ($base | sha256sum | trunc 8) -}}
+{{- end }}
+
 {{- define "boushun.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}

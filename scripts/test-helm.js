@@ -10,6 +10,13 @@ function helm(args) {
   return result.stdout;
 }
 
+function helmFailure(args) {
+  const result = spawnSync("helm", args, { encoding: "utf8" });
+  assert.equal(result.error, undefined, `Unable to run helm: ${result.error?.message}`);
+  assert.notEqual(result.status, 0, `helm ${args.join(" ")} unexpectedly succeeded`);
+  return `${result.stdout}\n${result.stderr}`;
+}
+
 function documents(manifest) {
   return manifest.split(/^---\s*$/m).filter((document) => document.trim());
 }
@@ -66,5 +73,36 @@ assert.match(customDeployment, /claimName: inventory-data/);
 assert.match(customDeployment, /name: BOUSHUN_DHCP_LEASE_PATHS/);
 assert.match(customDeployment, /mountPath: \/inputs/);
 assert.match(customDeployment, /secretName: boushun-inputs/);
+
+const digest = `sha256:${"a".repeat(64)}`;
+const digestRendered = helm([
+  "template", "digest", chart,
+  "--namespace", "inventory",
+  "--set-string", `image.digest=${digest}`,
+]);
+assert.match(digestRendered, new RegExp(`image: "ghcr\\.io/emstoo/boushun@${digest}"`));
+assert.doesNotMatch(digestRendered, /boushun:@sha256/);
+
+const alphaRole = documents(helm([
+  "template", "boushun", chart,
+  "--namespace", "alpha",
+])).find((document) => /kind: ClusterRole\n/.test(document));
+const betaRole = documents(helm([
+  "template", "boushun", chart,
+  "--namespace", "beta",
+])).find((document) => /kind: ClusterRole\n/.test(document));
+const alphaRoleName = alphaRole?.match(/metadata:\s+name: ([^\s]+)/)?.[1];
+const betaRoleName = betaRole?.match(/metadata:\s+name: ([^\s]+)/)?.[1];
+assert.ok(alphaRoleName, "alpha ClusterRole name was not rendered");
+assert.ok(betaRoleName, "beta ClusterRole name was not rendered");
+assert.notEqual(alphaRoleName, betaRoleName, "ClusterRole names must be namespace-specific");
+
+const reservedEnvFailure = helmFailure([
+  "template", "invalid", chart,
+  "--namespace", "inventory",
+  "--set", "extraEnv[0].name=BOUSHUN_PORT",
+  "--set-string", "extraEnv[0].value=9999",
+]);
+assert.match(reservedEnvFailure, /BOUSHUN_PORT/);
 
 console.log("Helm chart lint and render acceptance passed");

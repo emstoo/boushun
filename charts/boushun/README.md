@@ -34,7 +34,7 @@ helm upgrade --install boushun ./charts/boushun \
   --values /path/to/boushun-values.yaml
 ```
 
-An empty `allowedCIDRs` list is valid and disables active scans. The chart defaults to the image tag in `Chart.yaml`; set `image.tag` to an immutable release or digest-controlled repository policy when managing upgrades independently from the chart.
+An empty `allowedCIDRs` list is valid and disables active scans. The chart defaults to the image tag in `Chart.yaml`. Set `image.tag` to a specific release, or set `image.digest` to a `sha256:` digest for an immutable `repository@digest` reference; a nonempty digest takes precedence over the tag.
 
 ## Existing input Secrets and files
 
@@ -54,7 +54,7 @@ extraVolumes:
       secretName: boushun-inputs
 ```
 
-The chart never creates or copies credentials. Kubernetes in-cluster authentication uses the selected ServiceAccount automatically.
+The chart never creates or copies credentials. Kubernetes in-cluster authentication uses the selected ServiceAccount automatically. `extraEnv` cannot redefine `BOUSHUN_HOST`, `BOUSHUN_PORT`, `BOUSHUN_DATA_DIR`, or `BOUSHUN_ALLOWED_CIDRS`; configure those through the chart's dedicated values.
 
 ## Validate locally
 

@@ -1,3 +1,8 @@
+{{- range .Values.extraEnv }}
+{{- if has .name (list "BOUSHUN_HOST" "BOUSHUN_PORT" "BOUSHUN_DATA_DIR" "BOUSHUN_ALLOWED_CIDRS") }}
+{{- fail (printf "extraEnv name %s is managed by the chart and cannot be overridden" .name) }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -44,7 +49,7 @@ spec:
       {{- end }}
       containers:
         - name: boushun
-          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+          image: {{ include "boushun.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
             allowPrivilegeEscalation: false

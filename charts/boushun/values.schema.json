@@ -6,11 +6,15 @@
     "image": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["repository", "pullPolicy", "tag"],
+      "required": ["repository", "pullPolicy", "tag", "digest"],
       "properties": {
         "repository": { "type": "string", "minLength": 1 },
         "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
-        "tag": { "type": "string" }
+        "tag": { "type": "string" },
+        "digest": {
+          "type": "string",
+          "pattern": "^$|^sha256:[0-9a-f]{64}$"
+        }
       }
     },
     "imagePullSecrets": {
@@ -70,7 +74,42 @@
     "tolerations": { "type": "array", "items": { "type": "object" } },
     "affinity": { "type": "object" },
     "topologySpreadConstraints": { "type": "array", "items": { "type": "object" } },
-    "extraEnv": { "type": "array", "items": { "type": "object" } },
+    "extraEnv": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 }
+        },
+        "not": {
+          "properties": {
+            "name": {
+              "enum": ["BOUSHUN_HOST", "BOUSHUN_PORT", "BOUSHUN_DATA_DIR", "BOUSHUN_ALLOWED_CIDRS"]
+            }
+          },
+          "required": ["name"]
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "enum": ["BOUSHUN_HOST", "BOUSHUN_PORT", "BOUSHUN_DATA_DIR", "BOUSHUN_ALLOWED_CIDRS"]
+                }
+              },
+              "required": ["name"]
+            },
+            "then": {
+              "properties": {
+                "BOUSHUN_HOST, BOUSHUN_PORT, BOUSHUN_DATA_DIR, and BOUSHUN_ALLOWED_CIDRS are chart-managed": false
+              },
+              "required": ["BOUSHUN_HOST, BOUSHUN_PORT, BOUSHUN_DATA_DIR, and BOUSHUN_ALLOWED_CIDRS are chart-managed"]
+            }
+          }
+        ]
+      }
+    },
     "extraVolumes": { "type": "array", "items": { "type": "object" } },
     "extraVolumeMounts": { "type": "array", "items": { "type": "object" } }
   },
