@@ -1,0 +1,12 @@
+apiVersion: v2
+name: boushun
+description: Local-first, evidence-backed LAN inventory and topology map
+type: application
+version: 0.2.0
+appVersion: "0.2.0"
+home: https://github.com/emstoo/boushun
+sources:
+  - https://github.com/emstoo/boushun
+maintainers:
+  - name: emstoo
+    url: https://github.com/emstoo

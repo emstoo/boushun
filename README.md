@@ -4,7 +4,7 @@ Boushun (忘春) is a local-first, evidence-backed LAN inventory and topology ma
 
 Boushun keeps raw observations on the probe, distinguishes facts from inference, and lets an operator correct device identity without destroying collected data.
 
-## What v0.1.0 provides
+## What v0.2.0 provides
 
 - Local-first inventory composed from Linux, DHCP, Kubernetes, controller exports, multicast, SNMPv3, and OUI observations.
 - Bounded ICMP discovery plus independent TCP and UDP service discovery across every usable address in an explicitly allowed CIDR.
@@ -31,6 +31,12 @@ The public demo is a generated static artifact, not a remotely exposed Boushun s
 
 Both screenshots are generated from a fixed-clock synthetic network by `npm run screenshots`. They contain no observations from a real LAN and can be reproduced as part of the release checks.
 
+## Published container image
+
+Version releases publish `ghcr.io/emstoo/boushun` as one OCI image index for `linux/amd64` and `linux/arm64`. Stable releases receive the full version, major/minor, `latest`, and immutable `sha-<commit>` tags, together with provenance and an SBOM. Prefer a full version or digest when repeatable deployment matters.
+
+The first successful publication creates the GHCR package. A maintainer must then set its visibility to **Public** in the package settings and verify an anonymous pull; a public source repository does not by itself prove that the package is anonymously readable.
+
 ## Quick start with Docker
 
 Live LAN collection requires Docker Engine with the Compose plugin on Linux. Boushun uses host networking so the container can see the host interfaces, neighbor cache, and local multicast traffic. The UI listens only on host loopback.
@@ -47,6 +53,12 @@ Open <http://127.0.0.1:4177>. Follow logs with `docker compose logs --follow`. S
 Choose **Load local configuration** to show the probe and eligible scan ranges, then explicitly start the desired network or service check. **Refresh source records** in Sources retrieves reference data; cached devices remain in the collapsed unconfirmed-candidate list. Responses retain their own address, method, and time. Reset stays empty after a reload or container restart and retains a disclosed recovery backup.
 
 The image runs as a non-root user with a read-only root filesystem. Compose grants only `NET_RAW` for ICMP probes and mounts `/data` as the writable database volume. Docker Desktop is not a supported live-probe environment because Boushun requires direct visibility of the Linux host network stack.
+
+## Kubernetes with Helm
+
+The chart under [`charts/boushun`](charts/boushun/) deploys the GHCR image as a single host-network probe with persistent `/data`, in-cluster Kubernetes inventory access, a read-only root filesystem, and only `NET_RAW` added after dropping all capabilities. It intentionally creates no Service or Ingress: the live server remains available only at the scheduled node's loopback address.
+
+Because Kubernetes Pod Security Baseline and Restricted policies disallow host networking, choose a deliberately exempted namespace and a node where the configured port is free. Review the chart's [installation, access, persistence, RBAC, input-mount, and rollback guidance](charts/boushun/README.md) before installing it.
 
 ### Local Node.js development
 
