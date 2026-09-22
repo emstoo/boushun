@@ -1,0 +1,11 @@
+Boushun is bound to 127.0.0.1:{{ .Values.port }} on its scheduled node.
+
+No Service or Ingress is created because Boushun has no authentication or
+trusted-proxy support. Run this command to identify the node:
+
+  kubectl --namespace {{ .Release.Namespace }} get pods \
+    --selector app.kubernetes.io/instance={{ .Release.Name }} \
+    --output wide
+
+Access the UI from that node or through an authenticated tunnel that terminates
+at its loopback address. Active scans remain disabled while allowedCIDRs is empty.

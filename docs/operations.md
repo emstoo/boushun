@@ -26,6 +26,26 @@ Reset clears observations, history, manual edits, layout, interface settings, sc
 
 The Docker base image is pinned to the verified multi-platform digest of the official `node:22-bookworm-slim` image. Review and update the tag and digest together when adopting a patched base image.
 
+### GHCR publication
+
+The [container workflow](../.github/workflows/container.yml) runs only for semantic version tags shaped like `vX.Y.Z`. Before creating a tag, update `package.json`, `package-lock.json`, the Helm chart `version`, and its `appVersion` to the same version; the workflow stops before registry login if they do not match. Tag only a reviewed commit whose required CI and container acceptance checks passed.
+
+The workflow authenticates to `ghcr.io` with its repository-scoped `GITHUB_TOKEN`, with only `contents: read` and `packages: write`. It builds one OCI index for `linux/amd64` and `linux/arm64` and publishes full-version, major/minor, `latest`, and full-commit tags with provenance and an SBOM. All external actions are pinned to full commit SHAs.
+
+The first push creates the package. In GitHub, open the `boushun` package settings, confirm that it is linked to this repository, change visibility to **Public**, and test an unauthenticated pull for both supported architectures. Treat the release as incomplete until the index contains both architectures and an anonymous client can pull it. Do not paste registry tokens into commands, workflow inputs, or logs.
+
+If publication fails, do not repeatedly move or recreate the tag. Identify whether version validation, an architecture build, authentication, or the final index push failed. A partially published tag is a stop condition. Fix the reviewed source or workflow, publish a new patch version, and leave the immutable commit tag available for diagnosis. Do not replace the official Node base image with another publisher to work around a missing platform.
+
+## Kubernetes and Helm
+
+The chart is stored at [`charts/boushun`](../charts/boushun/). It preserves the server's local-only security boundary by using `hostNetwork: true` while binding HTTP to `127.0.0.1`; it creates neither a Service nor an Ingress. It runs one replica with a `Recreate` strategy because the JSON store permits one writer, the default claim is `ReadWriteOnce`, and the node loopback port can have only one listener.
+
+Before installation or upgrade, identify the selected Linux node, verify that its Boushun port is free, confirm that the namespace deliberately permits host networking, and verify storage provisioning. Record a database export before an upgrade. The known-good capacity during replacement is the previous ReplicaSet and persisted claim, but there is a short interruption because old and new probes must not run concurrently.
+
+Phase gates are: the existing probe is healthy and its database export succeeds; `helm lint` and representative `helm template` validation pass; the replacement Pod becomes ready; the loopback UI and `/api/health` work on the selected node; the database summary matches the pre-change state; and an explicitly requested local configuration refresh returns the expected bounded interfaces and CIDRs. Stop on any unexplained timeout, restart, scheduling conflict, permission error, or data discrepancy. Use Helm rollback only after checking application/database compatibility; if state is damaged, stop the Pod and use the UI's documented database import procedure rather than running concurrent old and new writers.
+
+Chart-managed RBAC contains only cluster-wide `list` for core Nodes and Services. Disable it and supply a pre-created ServiceAccount when cluster policy requires centrally managed roles. Mount SNMPv3 or other inputs only from their documented Secret or file source via read-only `extraVolumes`; never put credential values in a values file. A chart-created PVC has Helm's `keep` resource policy by default, so uninstall or a change that removes the claim leaves it orphaned instead of deleting stored observations. Reuse it through `persistence.existingClaim`, or remove it only after a verified export and explicit data-retirement decision.
+
 ## Static demo build and publication
 
 The public demo is a static site containing synthetic observations, not a public Boushun server. It does not use the probe's persistent database or credential sources. Its [capabilities and limits](features.md#static-read-only-demo) differ from the local installation.

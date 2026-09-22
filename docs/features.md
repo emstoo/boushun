@@ -1,6 +1,6 @@
 # Boushun Feature Reference
 
-Boushun 0.1.0 provides:
+Boushun 0.2.0 provides:
 
 - A v2 inventory with separate Device, Interface, IP assignment, VIP, Network, and Service entities.
 - A source-composed Current state: a later passive, TCP, or UDP run replaces only that source's observation instead of erasing other valid results; historical detail and comparison use the same as-of semantics.

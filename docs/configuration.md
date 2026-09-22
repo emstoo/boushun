@@ -33,6 +33,8 @@ services:
 
 Remove unused entries. A kubeconfig that refers to separate certificate files also needs those files mounted and its paths adjusted for the container. Use the same pattern with `BOUSHUN_CONTROLLER_SNAPSHOT_PATHS` or `BOUSHUN_DHCP_LEASE_PATHS` for other read-only sources. Never bake credentials into the image or commit the local configuration files.
 
+For Helm, use `extraEnv`, `extraVolumeMounts`, and `extraVolumes` to reference an existing Kubernetes Secret or other read-only volume. Keep credential values out of Helm values and source control; the chart does not create, copy, or inspect Secrets. In-cluster Kubernetes collection normally uses the chart ServiceAccount and does not require a kubeconfig mount.
+
 ## OUI data
 
 Boushun never downloads OUI data at runtime. Update the local database deliberately:
