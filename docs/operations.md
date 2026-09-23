@@ -14,11 +14,13 @@ No passive, standard, or deep profile scans ports. Service discovery does not se
 
 ### ICMP execution and diagnosis
 
-The container runs Node.js as UID/GID 1000 without effective or permitted capabilities. All container capabilities are dropped except `NET_RAW` in the bounding set. Standard and Deep scans execute the image's `/usr/bin/ping`, which acquires its `cap_net_raw` file capability; this requires `no_new_privs` to remain unset. The Compose configuration and Helm chart therefore permit that narrowly bounded privilege transition. The root filesystem remains read-only, seccomp remains runtime-default in Kubernetes, and no other capability is added.
+The container runs Node.js as UID/GID 1000 without effective or permitted capabilities. The final image build removes every setuid/setgid bit and all inherited file capabilities, then restores only `/usr/bin/ping cap_net_raw=ep`. All runtime capabilities are dropped except `NET_RAW` in the bounding set. Standard and Deep scans execute that audited ping file; this requires `no_new_privs` to remain unset. The Compose configuration and Helm chart therefore permit that specific capability transition. The root filesystem remains read-only, seccomp remains runtime-default in Kubernetes, and no other runtime or file capability is present.
 
 Readiness checks only the loopback health API. A separate `docker compose exec` or `kubectl exec` invocation of ping can have a different capability state, so its success does not prove that the server process can perform ICMP. Validate the production path by starting an explicitly authorized Standard scan and reading the scan job result. Boushun reports fixed classifications for a missing ping binary, execution/capability denial, ping permission/socket/argument errors, process timeout, signal termination, and other execution errors. Exit code 1 remains an ordinary no-response result. Raw ping stderr is not returned.
 
 For Kubernetes, `allowPrivilegeEscalation: true` is a deliberate short-term trade-off and is incompatible with the Restricted Pod Security profile. Use only the already required, deliberately exempted host-network namespace; do not weaken policy cluster-wide or add capabilities beyond `NET_RAW`. An implementation that performs ICMP without the ping file capability is required before restoring `allowPrivilegeEscalation: false`.
+
+Container acceptance scans the complete image root filesystem for setuid/setgid files and separately requires the file-capability inventory to contain only `/usr/bin/ping cap_net_raw=ep`. Re-run this gate whenever the pinned base-image digest or installed package set changes. Any new privilege-bearing file is a release blocker until its origin and need are reviewed and the image hardening step is updated if necessary.
 
 ## Storage and recovery
 

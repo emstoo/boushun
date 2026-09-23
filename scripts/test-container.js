@@ -108,6 +108,13 @@ try {
   assert.equal(await inspect(id, "{{json .HostConfig.CapDrop}}"), '["ALL"]');
   assert.equal(await inspect(id, "{{json .HostConfig.CapAdd}}"), '["CAP_NET_RAW"]');
   assert.equal(await inspect(id, "{{.State.Health.Status}}"), "healthy");
+  const setIdExecutables = await compose("exec", "--no-TTY", "--privileged", "--user", "root", "boushun",
+    "find", "/", "-xdev", "-type", "f", "-perm", "/6000", "-print");
+  assert.equal(setIdExecutables, "", "Image root filesystem must contain no setuid or setgid files");
+  const fileCapabilities = await compose("exec", "--no-TTY", "--privileged", "--user", "root", "boushun",
+    "getcap", "-r", "/");
+  assert.equal(fileCapabilities, "/usr/bin/ping cap_net_raw=ep",
+    "ping NET_RAW must be the image's only file capability");
   assert.equal(await inspect(id, '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Type}}:{{.RW}}{{end}}{{end}}'), "volume:true");
   assert.equal(await inspect(id, '{{range .Mounts}}{{if eq .Destination "/run/boushun-inputs"}}{{.Type}}:{{.RW}}{{end}}{{end}}'), "bind:false");
   const tmpfs = (await inspect(id, '{{index .HostConfig.Tmpfs "/tmp"}}')).split(",");
