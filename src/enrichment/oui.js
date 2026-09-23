@@ -1,25 +1,42 @@
 import { readFile } from "node:fs/promises";
 
-export async function loadOuiDatabase(filePath) {
-  if (!filePath) return new Map();
+export async function loadOuiDatabase(filePath, options = {}) {
+  const reader = options.reader ?? readFile;
+  if (!filePath) return ouiLoadResult("missing");
   try {
-    return parseOuiCsv(await readFile(filePath, "utf8"));
+    const records = parseOuiCsv(await reader(filePath, "utf8"));
+    return records.size > 0 ? ouiLoadResult("connected", records) : ouiLoadResult("invalid");
   } catch (error) {
-    if (["ENOENT", "EACCES"].includes(error.code)) return new Map();
+    if (error?.code === "ENOENT") return ouiLoadResult("missing");
+    if (["EACCES", "EPERM"].includes(error?.code)) return ouiLoadResult("unreadable");
+    if (error?.code === "INVALID_OUI_CSV") return ouiLoadResult("invalid");
     throw error;
   }
 }
 
 export function parseOuiCsv(text) {
+  const lines = String(text).split(/\r?\n/);
+  const header = csvColumns(lines[0] ?? "");
+  if (header[0]?.replace(/^\uFEFF/, "") !== "Registry"
+    || header[1] !== "Assignment"
+    || header[2] !== "Organization Name") {
+    const error = new Error("Invalid IEEE MA-L CSV header");
+    error.code = "INVALID_OUI_CSV";
+    throw error;
+  }
   const result = new Map();
-  for (const line of String(text).split(/\r?\n/)) {
+  for (const line of lines.slice(1)) {
     const columns = csvColumns(line);
-    if (columns.length < 3 || /^(registry|assignment)$/i.test(columns[0])) continue;
+    if (columns.length < 3 || columns[0] !== "MA-L") continue;
     const prefix = columns[1]?.replace(/[^0-9a-f]/gi, "").toUpperCase();
     const organization = columns[2]?.trim();
     if (prefix?.length >= 6 && organization) result.set(prefix.slice(0, 6), organization);
   }
   return result;
+}
+
+function ouiLoadResult(state, records = new Map()) {
+  return { state, records };
 }
 
 export function organizationForMac(database, mac) {

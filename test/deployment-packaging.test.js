@@ -76,7 +76,7 @@ test("[DEP-13] Helm workload preserves the local-only container security boundar
   assert.match(deployment, /name: BOUSHUN_HOST\s+value: "127\.0\.0\.1"/);
   assert.match(deployment, /runAsNonRoot: true/);
   assert.match(deployment, /readOnlyRootFilesystem: true/);
-  assert.match(deployment, /allowPrivilegeEscalation: false/);
+  assert.match(deployment, /allowPrivilegeEscalation: true/);
   assert.match(deployment, /drop:\s+\n\s+- ALL/);
   assert.match(deployment, /add:\s+\n\s+- NET_RAW/);
   assert.match(deployment, /type: RuntimeDefault/);

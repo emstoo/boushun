@@ -23,10 +23,17 @@ if (args[0] === "grandchild") {
   hold("plugin");
 } else if (args.includes("config")) {
   if (scenario === "preflight") hold("preflight");
-  else console.log(JSON.stringify({ services: {
-    boushun: { network_mode: args.includes("test/container/compose.yaml") ? "service:fixture" : "host", environment: { BOUSHUN_HOST: "127.0.0.1" } },
-    fixture: { network_mode: "none" },
-  } }));
+  else {
+    const acceptance = args.includes("test/container/compose.yaml");
+    console.log(JSON.stringify({
+      networks: acceptance ? { acceptance: { internal: true } } : undefined,
+      services: {
+        boushun: { network_mode: acceptance ? "service:fixture" : "host", environment: { BOUSHUN_HOST: "127.0.0.1" } },
+        fixture: acceptance ? { networks: { acceptance: { ipv4_address: "192.168.50.2" } } } : undefined,
+        responder: acceptance ? { networks: { acceptance: { ipv4_address: "192.168.50.3" } } } : undefined,
+      },
+    }));
+  }
 } else if (args.includes("up")) {
   record("resources-created");
   spawn(process.execPath, [process.argv[1], "grandchild"], { stdio: "inherit" });

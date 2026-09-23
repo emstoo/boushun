@@ -5,6 +5,7 @@ This chart runs one Boushun probe on a Linux Kubernetes node. It deliberately us
 ## Prerequisites and impact
 
 - The target namespace must permit `hostNetwork` and `hostPort`. Kubernetes Pod Security Baseline and Restricted policies forbid those settings, so use a deliberately exempted namespace rather than weakening policy cluster-wide.
+- The container sets `allowPrivilegeEscalation: true` because the non-root Node.js process must execute the image's `/usr/bin/ping`, whose file capability acquires `NET_RAW`. All runtime capabilities are dropped before adding only `NET_RAW`; the container is not privileged and retains its read-only root filesystem and runtime-default seccomp profile. This is a deliberate short-term trade-off and is incompatible with the Restricted Pod Security profile. Do not add broader capabilities to work around an ICMP error.
 - Port `4177` (or the configured `port`) must be free on the selected node.
 - The chart runs exactly one replica with a `Recreate` strategy. The JSON store supports one process, the default claim is `ReadWriteOnce`, and the loopback host port cannot be shared. Updates therefore have a short interruption and are not highly available.
 - A default StorageClass, an existing claim, or `persistence.enabled=false` is required. Disabling persistence loses state whenever the Pod is replaced.
@@ -55,6 +56,26 @@ extraVolumes:
 ```
 
 The chart never creates or copies credentials. Kubernetes in-cluster authentication uses the selected ServiceAccount automatically. `extraEnv` cannot redefine `BOUSHUN_HOST`, `BOUSHUN_PORT`, `BOUSHUN_DATA_DIR`, or `BOUSHUN_ALLOWED_CIDRS`; configure those through the chart's dedicated values.
+
+## OUI vendor database
+
+Boushun does not download OUI data automatically. The chart's persistent `/data` volume is the trusted destination for the IEEE MA-L CSV. Resolve the one Boushun Pod first, then run the bundled updater in that explicitly named Pod and container:
+
+```console
+kubectl -n boushun get pods -l app.kubernetes.io/instance=boushun
+kubectl -n boushun exec <pod-name> -c boushun -- ./scripts/update-oui.sh /data/oui.csv
+kubectl -n boushun exec <pod-name> -c boushun -- stat -c '%u:%g %a %s' /data/oui.csv
+```
+
+The final command must report owner/group `1000:1000`, mode `600`, and a nonzero size. The updater requires the IEEE CSV header and at least 1,000 valid MA-L records before atomically replacing the existing file. It preserves the previous database when download or validation fails.
+
+After updating, run **Refresh source records** or a Passive scan. Passive collection sends no active network probes. In **Sources**, confirm **OUI vendor database** is `connected` and has a nonzero record count. Missing, unreadable, and invalid files are reported separately. Any future scheduled updater must remain disabled by default and require explicit operator opt-in.
+
+## ICMP troubleshooting
+
+Pod readiness only verifies the loopback health API; it does not prove that the server process can start `ping`. Likewise, a successful interactive `kubectl exec ... ping` can run with a different capability state and does not validate the server's child-process path. Start a bounded Standard scan through the Boushun UI/API and inspect its job result. Boushun distinguishes a missing binary, execution/capability denial, ping's permission/socket/argument error, process timeout, signal termination, and an ordinary no-response result without exposing raw stderr.
+
+If the job reports execution or capability denial, confirm that the rendered container still has `allowPrivilegeEscalation: true`, drops `ALL`, and adds only `NET_RAW`. A namespace enforcing the Restricted Pod Security profile cannot run this short-term ICMP design; do not weaken policy cluster-wide. A future ICMP implementation that does not depend on the ping file capability can restore `allowPrivilegeEscalation: false`.
 
 ## Validate locally
 

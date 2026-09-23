@@ -22,7 +22,17 @@ while [ "$#" -gt 0 ]; do
   if [ "$1" = "--output" ]; then output=$2; shift 2; else shift; fi
 done
 case "\${BOUSHUN_TEST_CURL_MODE:-success}" in
-  success) printf 'Registry,Assignment,Organization Name\nMA-L,001122,Example Test\n' > "$output" ;;
+  success)
+    printf 'Registry,Assignment,Organization Name\n' > "$output"
+    index=0
+    while [ "$index" -lt 1000 ]; do
+      printf 'MA-L,%06X,Example Test %s\n' "$index" "$index" >> "$output"
+      index=$((index + 1))
+    done
+    ;;
+  bad-header) printf 'Content-Type,text/html\nMA-L,001122,Example Test\n' > "$output" ;;
+  too-few) printf 'Registry,Assignment,Organization Name\nMA-L,001122,Example Test\n' > "$output" ;;
+  html) printf '<html><body>temporary error</body></html>\n' > "$output" ;;
   empty) : > "$output" ;;
   failure) exit 22 ;;
 esac
@@ -42,5 +52,9 @@ esac
   assert.equal(await readFile(destination, "utf8"), "preserve-on-failure\n");
   await assert.rejects(execute("empty"));
   assert.equal(await readFile(destination, "utf8"), "preserve-on-failure\n");
+  for (const mode of ["bad-header", "too-few", "html"]) {
+    await assert.rejects(execute(mode));
+    assert.equal(await readFile(destination, "utf8"), "preserve-on-failure\n");
+  }
   assert.deepEqual(await readdir(path.dirname(destination)), ["oui.csv"]);
 });

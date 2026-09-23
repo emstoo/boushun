@@ -138,10 +138,29 @@ test("[OBS-05, OBS-06, OBS-11] a successful recheck replaces its scope while unr
   assert.deepEqual([first, noResponse], rawHistory);
 });
 
-test("[OBS-07] a probe execution failure is not a timeout or a successful empty check", async () => {
-  await assert.rejects(collectLinux({ profile: "standard", cidr: "192.168.50.0/30", allowedCIDRs: ["192.168.50.0/30"],
-    runner: runner([], [], async () => { throw Object.assign(new Error("Cannot execute probe"), { code: "ENOENT" }); }),
-    textReader: async () => "", reverseLookup: async () => [] }), /probe|ping|ENOENT/i);
+test("[OBS-07] ICMP execution failures use safe actionable classifications", async () => {
+  const cases = [
+    [{ code: "ENOENT" }, "ICMP probe failed: ping binary is unavailable"],
+    [{ code: "EACCES" }, "ICMP probe failed: ping execution or capability denied"],
+    [{ code: "EPERM" }, "ICMP probe failed: ping execution or capability denied"],
+    [{ code: 2 }, "ICMP probe failed: ping reported a permission, socket, or argument error"],
+    [{ killed: true, signal: "SIGTERM" }, "ICMP probe failed: ping process timed out"],
+    [{ signal: "SIGKILL" }, "ICMP probe failed: ping process terminated by a signal"],
+    [{ code: 7 }, "ICMP probe failed: ping execution error"],
+  ];
+  for (const [properties, message] of cases) {
+    await assert.rejects(collectLinux({ profile: "standard", cidr: "192.168.50.0/30", allowedCIDRs: ["192.168.50.0/30"],
+      runner: runner([], [], async () => { throw Object.assign(new Error("unsafe stderr must not escape"), properties); }),
+      textReader: async () => "", reverseLookup: async () => [] }),
+    (error) => error.message === message);
+  }
+});
+
+test("[OBS-07] ping exit code 1 remains an expected no-response result", async () => {
+  const snapshot = await collectLinux({ profile: "standard", cidr: "192.168.50.0/30", allowedCIDRs: ["192.168.50.0/30"],
+    runner: runner([], [], async () => { throw Object.assign(new Error("no response"), { code: 1 }); }),
+    textReader: async () => "", reverseLookup: async () => [] });
+  assert.deepEqual(snapshot.scan.probes.map((probe) => [probe.address, probe.result]), [[ADDRESS, "timeout"]]);
 });
 
 test("[OBS-09] forwarding evidence does not confirm the learned endpoint", () => {

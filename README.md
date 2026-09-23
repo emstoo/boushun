@@ -4,7 +4,7 @@ Boushun (忘春) is a local-first, evidence-backed LAN inventory and topology ma
 
 Boushun keeps raw observations on the probe, distinguishes facts from inference, and lets an operator correct device identity without destroying collected data.
 
-## What v0.2.0 provides
+## What v0.2.1 provides
 
 - Local-first inventory composed from Linux, DHCP, Kubernetes, controller exports, multicast, SNMPv3, and OUI observations.
 - Bounded ICMP discovery plus independent TCP and UDP service discovery across every usable address in an explicitly allowed CIDR.
@@ -52,11 +52,11 @@ Open <http://127.0.0.1:4177>. Follow logs with `docker compose logs --follow`. S
 
 Choose **Load local configuration** to show the probe and eligible scan ranges, then explicitly start the desired network or service check. **Refresh source records** in Sources retrieves reference data; cached devices remain in the collapsed unconfirmed-candidate list. Responses retain their own address, method, and time. Reset stays empty after a reload or container restart and retains a disclosed recovery backup.
 
-The image runs as a non-root user with a read-only root filesystem. Compose grants only `NET_RAW` for ICMP probes and mounts `/data` as the writable database volume. Docker Desktop is not a supported live-probe environment because Boushun requires direct visibility of the Linux host network stack.
+The image runs as a non-root user with a read-only root filesystem. Compose drops all capabilities except the `NET_RAW` bounding capability required by the image's `ping` file capability and mounts `/data` as the writable database volume. This narrowly permits the ping child process to acquire `NET_RAW`; see the documented [ICMP security trade-off](docs/operations.md#icmp-execution-and-diagnosis). Docker Desktop is not a supported live-probe environment because Boushun requires direct visibility of the Linux host network stack.
 
 ## Kubernetes with Helm
 
-The chart under [`charts/boushun`](charts/boushun/) deploys the GHCR image as a single host-network probe with persistent `/data`, in-cluster Kubernetes inventory access, a read-only root filesystem, and only `NET_RAW` added after dropping all capabilities. It intentionally creates no Service or Ingress: the live server remains available only at the scheduled node's loopback address.
+The chart under [`charts/boushun`](charts/boushun/) deploys the GHCR image as a single host-network probe with persistent `/data`, in-cluster Kubernetes inventory access, a read-only root filesystem, and only `NET_RAW` added after dropping all capabilities. It allows the bounded privilege transition required by the ping file capability and documents why this is incompatible with the Restricted Pod Security profile. It intentionally creates no Service or Ingress: the live server remains available only at the scheduled node's loopback address.
 
 Because Kubernetes Pod Security Baseline and Restricted policies disallow host networking, choose a deliberately exempted namespace and a node where the configured port is free. Review the chart's [installation, access, persistence, RBAC, input-mount, and rollback guidance](charts/boushun/README.md) before installing it.
 

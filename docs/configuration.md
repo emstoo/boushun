@@ -49,7 +49,17 @@ For the standard container, update the persistent volume instead:
 docker compose exec boushun ./scripts/update-oui.sh /data/oui.csv
 ```
 
-The script downloads the IEEE MA-L UTF-8 CSV and writes it mode `0600`.
+The script downloads the IEEE MA-L UTF-8 CSV, requires its expected header and at least 1,000 valid MA-L records, then atomically replaces the destination with mode `0600`. An HTTP error, empty response, HTML response, invalid header, or insufficient record count leaves the previous database untouched.
+
+For Helm, update the chart's persistent volume from the explicitly named Boushun Pod:
+
+```console
+kubectl -n boushun get pods -l app.kubernetes.io/instance=boushun
+kubectl -n boushun exec <pod-name> -c boushun -- ./scripts/update-oui.sh /data/oui.csv
+kubectl -n boushun exec <pod-name> -c boushun -- stat -c '%u:%g %a %s' /data/oui.csv
+```
+
+Expect UID/GID `1000:1000`, mode `600`, and a nonzero byte count. Then run **Refresh source records** or a Passive scan; Passive collection does not send active probes. The Sources screen must show **OUI vendor database** as `connected` with a nonzero record count. A missing file is `not-configured`; an unreadable or invalid file is `degraded` with a distinct fixed message. Automatic OUI updates are intentionally absent. If automation is added outside Boushun, keep it disabled by default and require explicit operator opt-in.
 
 ## SNMPv3
 
