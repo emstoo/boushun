@@ -1,10 +1,12 @@
 import { readFile } from "node:fs/promises";
 
 export async function loadOuiDatabase(filePath, options = {}) {
-  const reader = options.reader ?? readFile;
   if (!filePath) return ouiLoadResult("missing");
   try {
-    const records = parseOuiCsv(await reader(filePath, "utf8"));
+    const text = options.reader
+      ? await options.reader(filePath, "utf8")
+      : await readFile(filePath, "utf8");
+    const records = parseOuiCsv(text);
     return records.size > 0 ? ouiLoadResult("connected", records) : ouiLoadResult("invalid");
   } catch (error) {
     if (error?.code === "ENOENT") return ouiLoadResult("missing");
