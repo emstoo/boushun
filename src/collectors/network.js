@@ -55,14 +55,20 @@ export async function collectNetwork(options = {}) {
 
   const ouiPath = options.ouiPath ?? process.env.BOUSHUN_OUI_PATH ?? path.join(options.dataDirectory ?? "data", "oui.csv");
   const oui = await loadOuiDatabase(ouiPath);
-  for (const device of snapshot.devices) device.manufacturer ||= organizationForMac(oui, device.mac);
+  for (const device of snapshot.devices) device.manufacturer ||= organizationForMac(oui.records, device.mac);
+  const ouiMessages = {
+    connected: `Loaded ${oui.records.size} vendor prefixes`,
+    missing: "OUI database file was not found",
+    unreadable: "OUI database file is not readable by the Boushun process",
+    invalid: "OUI database file is not a valid IEEE MA-L CSV",
+  };
   snapshot.sources.push({
     id: "oui-database",
     label: "OUI vendor database",
-    configured: oui.size > 0,
-    status: oui.size > 0 ? "connected" : "not-configured",
-    recordCount: oui.size,
-    message: oui.size > 0 ? `Loaded ${oui.size} vendor prefixes` : "No OUI database was loaded",
+    configured: oui.state !== "missing",
+    status: oui.state === "connected" ? "connected" : oui.state === "missing" ? "not-configured" : "degraded",
+    recordCount: oui.records.size,
+    message: ouiMessages[oui.state],
   });
   onProgress({ phase: "identification", completed: 2, total: 2, message: "Identity matching complete" });
 

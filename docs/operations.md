@@ -12,6 +12,16 @@ UDP service discovery is also independent and checks every usable address. Known
 
 No passive, standard, or deep profile scans ports. Service discovery does not send banners, try login credentials, or change a remote device. SNMPv3 remains limited to configured targets, while mDNS and WS-Discovery-style multicast belong to discovery collectors rather than range-wide UDP probing. A cancelled job closes active sockets and does not persist a partial snapshot.
 
+### ICMP execution and diagnosis
+
+The container runs Node.js as UID/GID 1000 without effective or permitted capabilities. The final image build removes every setuid/setgid bit and all inherited file capabilities, then restores only `/usr/bin/ping cap_net_raw=ep`. All runtime capabilities are dropped except `NET_RAW` in the bounding set. Standard and Deep scans execute that audited ping file; this requires `no_new_privs` to remain unset. The Compose configuration and Helm chart therefore permit that specific capability transition. The root filesystem remains read-only, seccomp remains runtime-default in Kubernetes, and no other runtime or file capability is present.
+
+Readiness checks only the loopback health API. A separate `docker compose exec` or `kubectl exec` invocation of ping can have a different capability state, so its success does not prove that the server process can perform ICMP. Validate the production path by starting an explicitly authorized Standard scan and reading the scan job result. Boushun reports fixed classifications for a missing ping binary, execution/capability denial, ping permission/socket/argument errors, process timeout, signal termination, and other execution errors. Exit code 1 remains an ordinary no-response result. Raw ping stderr is not returned.
+
+For Kubernetes, `allowPrivilegeEscalation: true` is a deliberate short-term trade-off and is incompatible with the Restricted Pod Security profile. Use only the already required, deliberately exempted host-network namespace; do not weaken policy cluster-wide or add capabilities beyond `NET_RAW`. An implementation that performs ICMP without the ping file capability is required before restoring `allowPrivilegeEscalation: false`.
+
+Container acceptance scans the complete image root filesystem for setuid/setgid files and separately requires the file-capability inventory to contain only `/usr/bin/ping cap_net_raw=ep`. Re-run this gate whenever the pinned base-image digest or installed package set changes. Any new privilege-bearing file is a release blocker until its origin and need are reviewed and the image hardening step is updated if necessary.
+
 ## Storage and recovery
 
 `data/state.json` is written atomically with mode `0600`; the directory is `0700`, and the latest 50 raw snapshots are retained. A v1 file is projected and rewritten as v2 on the next mutation. Current-state composition is a read model over those append-only snapshots, so upgrading does not rewrite existing observations. Overrides never rewrite raw observations and each edit appends an actor, time, action, before/after record, up to 500 records.
@@ -38,7 +48,7 @@ If publication fails, do not repeatedly move or recreate the tag. Identify wheth
 
 ## Kubernetes and Helm
 
-The chart is stored at [`charts/boushun`](../charts/boushun/). It preserves the server's local-only security boundary by using `hostNetwork: true` while binding HTTP to `127.0.0.1`; it creates neither a Service nor an Ingress. It runs one replica with a `Recreate` strategy because the JSON store permits one writer, the default claim is `ReadWriteOnce`, and the node loopback port can have only one listener.
+The chart is stored at [`charts/boushun`](../charts/boushun/). It preserves the server's local-only HTTP boundary by using `hostNetwork: true` while binding HTTP to `127.0.0.1`; it creates neither a Service nor an Ingress. It runs one replica with a `Recreate` strategy because the JSON store permits one writer, the default claim is `ReadWriteOnce`, and the node loopback port can have only one listener. Its ICMP security-context trade-off is documented above and in the chart README.
 
 Before installation or upgrade, identify the selected Linux node, verify that its Boushun port is free, confirm that the namespace deliberately permits host networking, and verify storage provisioning. Record a database export before an upgrade. The known-good capacity during replacement is the previous ReplicaSet and persisted claim, but there is a short interruption because old and new probes must not run concurrently.
 

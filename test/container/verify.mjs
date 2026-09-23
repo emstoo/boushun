@@ -19,12 +19,22 @@ const api = async (endpoint, method = "GET", body) => {
 };
 
 assert.notEqual(process.getuid(), 0);
+const processStatus = Object.fromEntries((await readFile("/proc/1/status", "utf8"))
+  .split("\n")
+  .map((line) => line.match(/^([^:]+):\s*(\S+)/))
+  .filter(Boolean)
+  .map((match) => [match[1], match[2]]));
+const netRaw = 1n << 13n;
+assert.equal(processStatus.NoNewPrivs, "0", "PID 1 must permit ping to acquire its NET_RAW file capability");
+assert.equal(BigInt(`0x${processStatus.CapEff}`), 0n, "Node.js PID 1 must start without effective capabilities");
+assert.equal(BigInt(`0x${processStatus.CapPrm}`), 0n, "Node.js PID 1 must start without permitted capabilities");
+assert.equal(BigInt(`0x${processStatus.CapBnd}`), netRaw, "PID 1 capability bounding set must contain only NET_RAW");
 async function waitForJob(job) {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
     const result = await api(`scans/${job.id}`);
     assert.ok(!["failed", "cancelled"].includes(result.job.status), "Synthetic collection must succeed");
-    if (result.job.status === "completed") return;
+    if (result.job.status === "completed") return result.job;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   assert.fail("Synthetic job exceeded its deadline");
@@ -37,14 +47,18 @@ if (phase === "before" || phase === "reset-after") {
 const state = await api("state");
 assert.ok(!JSON.stringify(await api("database/export")).includes(protectedMarker));
 assert.equal(state.sourceHealth.find((source) => source.id === "local-network")?.status, "connected");
-assert.ok(state.snapshot.interfaces.some((item) => item.name === "boushun0"
-  && item.addresses.some((address) => address.address === "192.168.50.1")));
+assert.ok(state.snapshot.interfaces.some((item) => item.name === "eth0"
+  && item.addresses.some((address) => address.address === "192.168.50.2")));
 assert.equal((await stat("/data")).mode & 0o777, 0o700);
 assert.equal((await stat("/data/state.json")).mode & 0o777, 0o600);
 
 if (phase === "before") {
-  await run("ping", ["-n", "-c", "1", "-W", "1", "192.168.50.1"], { timeout: 3_000 });
-  const { job } = await api("tcp-service-scan", "POST", { cidr: "192.168.50.1/32", preset: "custom", customPorts: "45178" });
+  await waitForJob((await api("scan", "POST", { profile: "standard", cidr: "192.168.50.2/31" })).job);
+  const standard = await api("state");
+  assert.equal(standard.snapshot.scan.targetCount, 1);
+  assert.equal(standard.snapshot.scan.responsiveCount, 1);
+  assert.deepEqual(standard.snapshot.scan.probes.map((probe) => [probe.address, probe.result]), [["192.168.50.3", "response"]]);
+  const { job } = await api("tcp-service-scan", "POST", { cidr: "192.168.50.2/32", preset: "custom", customPorts: "45178" });
   let completed;
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
@@ -56,7 +70,7 @@ if (phase === "before") {
   assert.ok(completed, "Synthetic scan must finish within its deadline");
   const observed = await api("state");
   assert.equal(observed.sourceHealth.find((source) => source.id === "local-network")?.status, "connected");
-  assert.ok(observed.tcpServiceObservation.endpoints.some((item) => item.address === "192.168.50.1" && item.port === 45178));
+  assert.ok(observed.tcpServiceObservation.endpoints.some((item) => item.address === "192.168.50.2" && item.port === 45178));
   await api("layout", "PUT", { positions });
   await writeFile("/data/acceptance-baseline.json", JSON.stringify((await api("database/export")).state), { flag: "wx", mode: 0o600 });
   // Existing owned file: a write must fail with EROFS, rather than mere directory permissions.

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { loadAll } from "js-yaml";
 
 const chart = "charts/boushun";
 
@@ -21,6 +22,10 @@ function documents(manifest) {
   return manifest.split(/^---\s*$/m).filter((document) => document.trim());
 }
 
+function resources(manifest) {
+  return loadAll(manifest).filter((resource) => resource && typeof resource === "object");
+}
+
 helm(["lint", chart, "--strict"]);
 
 const rendered = helm([
@@ -31,9 +36,11 @@ const rendered = helm([
 const defaults = documents(rendered);
 const deployment = defaults.find((document) => /kind: Deployment/.test(document));
 const role = defaults.find((document) => /kind: ClusterRole\n/.test(document));
+const deploymentResource = resources(rendered).find((resource) => resource.kind === "Deployment");
 
 assert.ok(deployment, "Deployment was not rendered");
 assert.ok(role, "ClusterRole was not rendered");
+assert.ok(deploymentResource, "Deployment YAML was not parsed");
 assert.equal(defaults.some((document) => /kind: (?:Service|Ingress)\n/.test(document)), false);
 assert.match(deployment, /replicas: 1/);
 assert.match(deployment, /hostNetwork: true/);
@@ -47,6 +54,14 @@ assert.match(deployment, /mountPath: \/tmp/);
 assert.match(role, /resources: \["nodes", "services"\]/);
 assert.match(role, /verbs: \["list"\]/);
 assert.doesNotMatch(role, /secrets/);
+const workloadContainer = deploymentResource.spec.template.spec.containers.find((container) => container.name === "boushun");
+assert.ok(workloadContainer, "Boushun container was not parsed");
+for (const probeName of ["startupProbe", "readinessProbe", "livenessProbe"]) {
+  const command = workloadContainer[probeName]?.exec?.command;
+  assert.ok(Array.isArray(command), `${probeName} exec command must be an array`);
+  assert.equal(command.every((item) => typeof item === "string"), true, `${probeName} exec command items must be strings`);
+}
+assert.equal(workloadContainer.securityContext.allowPrivilegeEscalation, true);
 
 const overridden = helm([
   "template", "custom", chart,

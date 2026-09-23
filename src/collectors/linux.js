@@ -272,7 +272,7 @@ async function pingSweep(targets, { runner, concurrency, signal, onProgress, evi
         result = "response";
       } catch (error) {
         if (signal?.aborted || error?.name === "AbortError") throw abortError();
-        if (error.code !== 1) throw new Error(`ICMP probe failed (${typeof error.code === "string" ? error.code : "execution error"})`);
+        if (error.code !== 1) throw icmpExecutionError(error);
         // A timeout is an expected negative result, not an application error.
       }
       const latencyMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
@@ -295,6 +295,21 @@ async function pingSweep(targets, { runner, concurrency, signal, onProgress, evi
   const workerCount = Math.max(1, Math.min(concurrency, targets.length || 1));
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
   return probes.sort((a, b) => targets.indexOf(a.address) - targets.indexOf(b.address));
+}
+
+function icmpExecutionError(error) {
+  if (error?.code === "ENOENT") return new Error("ICMP probe failed: ping binary is unavailable");
+  if (["EACCES", "EPERM"].includes(error?.code)) {
+    return new Error("ICMP probe failed: ping execution or capability denied");
+  }
+  if (error?.code === 2) {
+    return new Error("ICMP probe failed: ping reported a permission, socket, or argument error");
+  }
+  if (error?.killed || error?.code === "ETIMEDOUT") {
+    return new Error("ICMP probe failed: ping process timed out");
+  }
+  if (error?.signal) return new Error("ICMP probe failed: ping process terminated by a signal");
+  return new Error("ICMP probe failed: ping execution error");
 }
 
 async function readResolverConfig(textReader, warnings) {

@@ -1,7 +1,7 @@
 FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5
 
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends ca-certificates curl iproute2 iputils-ping \
+    && apt-get install --yes --no-install-recommends ca-certificates curl iproute2 iputils-ping libcap2-bin \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -9,7 +9,14 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --chown=node:node src ./src
 COPY --chown=node:node scripts ./scripts
 COPY --chown=node:node LICENSE README.md ./
-RUN mkdir -p /data && chown -R node:node /data
+RUN mkdir -p /data \
+    && chown -R node:node /data \
+    && find / -xdev -type f -perm /6000 -exec chmod a-s {} + \
+    && getcap -r / 2>/dev/null \
+      | while IFS= read -r capability; do setcap -r "${capability% *}"; done \
+    && setcap cap_net_raw=ep /usr/bin/ping \
+    && test -z "$(find / -xdev -type f -perm /6000 -print -quit)" \
+    && test "$(getcap -r / 2>/dev/null)" = "/usr/bin/ping cap_net_raw=ep"
 USER node
 ENV BOUSHUN_HOST=127.0.0.1 BOUSHUN_PORT=4177 BOUSHUN_DATA_DIR=/data
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
