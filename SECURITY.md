@@ -4,10 +4,10 @@
 
 | Version | Supported |
 |---|---|
-| 0.1.x | Yes |
+| 0.2.x | Yes |
 | Default branch | Yes |
 
-Security fixes are made against the supported release line and the default branch. Upgrade to a supported version before reporting a problem that exists only in an older release.
+Security fixes are made against the supported release line and the default branch. Upgrade to a supported version before reporting a problem that exists only in an older release. Running Boushun directly with Node.js is supported on the latest release of the Node.js 22, 24, and 26 lines; the container image bundles its own runtime.
 
 ## Reporting a vulnerability
 

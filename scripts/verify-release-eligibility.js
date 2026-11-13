@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 
 export const REQUIRED_CHECK_NAMES = Object.freeze([
   "Browser acceptance",
-  "Node.js 22.0.0 checks",
   "Node.js 22 checks",
   "Node.js 24 checks",
   "Node.js 26 checks",
