@@ -62,7 +62,7 @@ Because Kubernetes Pod Security Baseline and Restricted policies disallow host n
 
 ### Local Node.js development
 
-Requirements are Linux, a supported Node.js 22, 24, or 26 release, `ip`, and `ping`. Kubernetes integration uses the client library with the standard kubeconfig search path outside a cluster or the mounted ServiceAccount inside a cluster; it does not shell out to `kubectl`. Startup preserves stored state without collecting.
+Requirements are Linux, the latest release of the Node.js 22, 24, or 26 line, `ip`, and `ping`. Kubernetes integration uses the client library with the standard kubeconfig search path outside a cluster or the mounted ServiceAccount inside a cluster; it does not shell out to `kubectl`. Startup preserves stored state without collecting.
 
 ```console
 cd boushun
